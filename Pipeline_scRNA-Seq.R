@@ -7,7 +7,7 @@ if (!require("BiocManager", quietly = TRUE))
 
 # If the packages are not installed use this code:
 # BiocManager::install(c("glmGamPoi", "biomaRt", "EnhancedVolcano", "speckle", "lisi", "AnnotationDbi","org.Mm.eg.db"))
-# install.packages(c("Seurat", "Matrix", "tidyverse", "ggvenn"))
+# install.packages(c("Seurat", "Matrix", "tidyverse", "ggvenn", "tibble", "circlize"))
 
 library(Seurat)
 library(SeuratObject)
@@ -24,6 +24,8 @@ library(ggrepel)
 library(AnnotationDbi)
 library(org.Mm.eg.db)
 library(biomaRt)
+library(tibble)
+library(circlize)
 
 ############################################################
 # 1. LOAD THE DATA AND CREATE SEURAT OBJECT
@@ -636,3 +638,89 @@ run_enrichment <- function(DEG_results,
 ############################################################
 # 7. SPECIFIC CELL TYPE DIFFERENTIAL EXPRESSION
 ############################################################
+
+HeatMap <- function(seurat_obj, 
+                    ident_column = "time",
+                    condition = "7dpi",
+                    control = "Uninjured",
+                    celltypes = c("Astrocytes", "Neurons", "Microglia", "OPCs", "Oligodendrocytes", "Endothelial"),
+                    genes_up = NULL,
+                    genes_down = NULL,
+                    logfc_threshold = 0,
+                    min_pct = 0.05,
+                    test_use = "MAST",
+                    output_file = "~/R/Figures/Heatmap_Acute.png",
+                    plot_width = 14,
+                    plot_height = 7,
+                    plot_dpi = 1080) {
+  
+  # Set identity classes
+  Idents(seurat_obj) <- ident_column
+  
+  # Initialize empty list to store DEG results
+  deg_results <- list()
+  
+  # Find DEGs for each cell type
+  for (ct in celltypes) {
+    # Subset the Seurat object
+    cells <- subset(seurat_obj, subset = celltype == ct)
+    
+    # Find markers
+    deg <- FindMarkers(cells, 
+                       ident.1 = condition, 
+                       ident.2 = control, 
+                       logfc.threshold = logfc_threshold, 
+                       min.pct = min_pct, 
+                       test.use = test_use)
+    
+    # Add gene and celltype information
+    deg$Gene <- rownames(deg)
+    deg$celltype <- ct
+    
+    # Store results
+    deg_results[[ct]] <- deg
+  }
+  
+  # Combine all results
+  combined_results <- bind_rows(deg_results)
+  
+  # Filter genes if provided
+  if (!is.null(genes_up) | !is.null(genes_down)) {
+    combined_results <- combined_results %>%
+      filter(Gene %in% genes_down | Gene %in% genes_up)
+  }
+  
+  # Prepare heatmap data
+  heatmap_data <- combined_results %>%
+    select(Gene, celltype, avg_log2FC) %>%
+    pivot_wider(names_from = celltype, values_from = avg_log2FC) %>%
+    column_to_rownames("Gene") %>%
+    as.matrix()
+  
+  # Replace NA with 0
+  heatmap_data[is.na(heatmap_data)] <- 0
+  
+  # Create heatmap
+  heatmap <- Heatmap(
+    heatmap_data,
+    col = circlize::colorRamp2(c(-7, 0, 7), c("blue", "white", "red")),
+    row_names_gp = gpar(fontsize = 8),
+    column_names_gp = gpar(fontsize = 8),
+    name = "log2FC"
+  )
+  
+  # Save plot
+  if (!is.null(output_file)) {
+    ggsave(output_file, heatmap, dpi = plot_dpi, height = plot_height, width = plot_width)
+  }
+  
+  # Return the heatmap
+  return(heatmap)
+}
+
+
+############################################################
+# APPLICATION OF THE PIPELINE
+############################################################
+
+
