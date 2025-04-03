@@ -1,0 +1,129 @@
+---
+title: "Acute&Sub-Chronic"
+output: html_document
+date: "2025-03-18"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F)
+```
+
+```{r}
+
+library(readxl)
+library(ggplot2)
+library(ggvenn)
+library(tidyr)
+library(ggrepel)
+library(stringr)
+library(purrr)
+
+# Data of DEGs
+times <- c("Acute (7 dpi)", "Sub-Chronic (4-6 wpi)", "Sub-Acute (21 dpi)", "First-Day (1 dpi)")
+file_paths <- c("~/R/Data/DEG_Acute.xlsx", "~/R/Data/DEG_Sub-Chronic.xlsx", "~/R/Data/DEG_Sub-Acute.xlsx", "~/R/Data/DEG_FirstDay.xlsx")
+
+datasets <- map(file_paths, read_excel)
+names(datasets) <- times
+
+# Rename Columns
+names_fc <- c("Acute (7 dpi)", "Sub-Chronic (4-6 wpi)", "Sub-Acute (21 dpi)", "First-Day (1 dpi)")
+names_pval <- c("p_val_adj_Acute", "p_val_adj_SubChronic", "p_val_adj_SubAcute", "p_val_adj_FirstDay")
+
+datasets <- map2(datasets, seq_along(datasets), ~ {
+  colnames(.x)[colnames(.x) == "p_val_adj"] <- names_pval[.y]
+  colnames(.x)[colnames(.x) == "avg_log2FC"] <- names_fc[.y]
+  .x
+})
+
+# Merge datasets
+results <- reduce(datasets, function(x, y) merge(x, y, by = "Gene", all = TRUE))
+
+# Select main columns
+results <- results[, c("Gene", names_pval, names_fc)]
+
+# Filtering
+thresh_fc <- 0.5
+thresh_pval <- 0.05
+
+upregulated <- map2(names_fc, names_pval, ~ {
+  results %>% filter(.data[[.x]] > thresh_fc & .data[[.y]] < thresh_pval) %>% pull(Gene)
+})
+
+downregulated <- map2(names_fc, names_pval, ~ {
+  results %>% filter(.data[[.x]] < -thresh_fc & .data[[.y]] < thresh_pval) %>% pull(Gene)
+})
+
+names(upregulated) <- times
+names(downregulated) <- times
+
+# Venn diagrams
+venn_up <- ggvenn(upregulated, fill_color = c("skyblue", "salmon", "lightgreen", "orange"), stroke_size = 0.5, text_size = 5, set_name_size = 5.5)
+venn_down <- ggvenn(downregulated, fill_color = c("skyblue", "salmon", "lightgreen", "orange"), stroke_size = 0.5, text_size = 5, set_name_size = 5.5)
+
+venn_up
+venn_down
+
+ggsave("~/R/Figures/Venn-Upregulated.png", venn_up, dpi = 1080, width = 8, height = 7)
+ggsave("~/R/Figures/Venn-Downregulated.png", venn_down, dpi = 1080, width = 8, height = 7)
+
+# Intersections
+paste("Intersection upregulated:", Reduce(intersect, upregulated))
+paste("Intersection downregulated:", Reduce(intersect, downregulated))
+
+venn_up <- venn(upregulated, show.plot = FALSE)  
+intersections_up <- attr(venn_up, "intersections") 
+intersections_up 
+
+venn_down <- venn(downregulated, show.plot = FALSE)
+intersections_down <- attr(venn_down, "intersections")
+intersections_down
+
+####################################################################################################
+
+# CHANGE OF THE EXPRESSION OVER TIME
+
+results <- results %>%
+  filter(p_val_adj_Acute < 0.05 & p_val_adj_SubChronic < 0.05 & p_val_adj_SubAcute < 0.05 & p_val_adj_FirstDay < 0.05)
+
+proteins <- read_excel("~/R/Data/MAIN_ECM_Proteome.xlsx")
+proteins <- proteins [, c("Gene", "Matrisome.Category")]
+
+results <-  merge(results, proteins, by = "Gene")
+results$`Before-Injury` <- 0 
+
+results <-  results %>% 
+  filter(`First-Day (1 dpi)` > 0.25 & `Acute (7 dpi)` > 0.25 & `Sub-Acute (21 dpi)` > 0.25 & `Sub-Chronic (4-6 wpi)` > 0.25 | `First-Day (1 dpi)` < -0.25 & `Acute (7 dpi)` < -0.25 & `Sub-Acute (21 dpi)` < -0.25 & `Sub-Chronic (4-6 wpi)` < -0.25 )
+
+results_long <- results %>%
+  pivot_longer(cols = c(`Before-Injury`,`First-Day (1 dpi)`, `Acute (7 dpi)`,`Sub-Acute (21 dpi)`, `Sub-Chronic (4-6 wpi)`), names_to = "TimePoint", values_to = "log2FC") %>% mutate(TimePoint = factor(TimePoint, levels = c("Before-Injury", "First-Day (1 dpi)", "Acute (7 dpi)", "Sub-Acute (21 dpi)", "Sub-Chronic (4-6 wpi)")))
+
+timevariation <- ggplot(results_long, aes(x = TimePoint, y = log2FC, group = Gene, color = Gene)) +
+  geom_line() +
+  geom_point() +
+  geom_text_repel(data = results_long %>% filter(TimePoint == "Sub-Chronic (4-6 wpi)"), aes(label = Gene), size = 3, nudge_x = 0.3, direction = "y", segment.color = "grey50") + theme_minimal() + labs(x = "Time Point", y = "log2 Fold Change", title = "Expression Changes Over Time") + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_color_viridis_d() + facet_grid(. ~ Matrisome.Category, scales = "free_y")
+
+timevariation
+
+ggsave("~/R/Figures/Layout.png",timevariation, dpi = 1080, width = 14, height = 7)
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+############################################################################
+
