@@ -525,9 +525,112 @@ DE_Analysis <- function(seurat_obj,
 # 6. PATHWAY ENRICHMENT ANALYSIS
 ############################################################
 
-pathway_enrichment <- function(DEG) {
+run_enrichment <- function(DEG_results,
+                           pval_threshold = 0.05,
+                           lfc_threshold = 0.75,
+                           genes_already_filtered = FALSE,
+                           organism_db = org.Mm.eg.db,
+                           ontology = "BP",
+                           keywords = c("neuro", "inflammation", "Wnt", "Rho", 
+                                        "regression", "remodelling", "SCI",
+                                        "axonal", "axon", "BMP", "spinal"),
+                           exclude_terms = "muscle",
+                           output_file = NULL) {
   
+  # Verify required columns exist
+  if (!all(c("p_val_adj", "avg_log2FC") %in% colnames(DEG_results))) {
+    stop("The data frame must contain: 'p_val_adj' y 'avg_log2FC' columns")
+  }
   
+  # Filter genes if not already filtered
+  if (!genes_already_filtered) {
+    sig_genes <- DEG_results %>%
+      filter(p_val_adj < pval_threshold & abs(avg_log2FC) > lfc_threshold)
+    
+    if (nrow(sig_genes) == 0) {
+      stop("There are no significant genes with that thresholds: (p_val_adj < ", 
+           pval_threshold, " y |log2FC| > ", lfc_threshold, ")")
+    }
+    gene_symbols <- rownames(sig_genes)
+  } else {
+    message("Genes already filtered")
+    gene_symbols <- rownames(DEG_results)
+  }
+  
+  # Convert gene symbols to ENTREZID
+  gene_convert <- clusterProfiler::bitr(gene_symbols,
+                                        fromType = "SYMBOL",
+                                        toType = "ENTREZID",
+                                        OrgDb = organism_db)
+  
+  if (nrow(gene_convert) == 0) {
+    stop("Error in SYMBOL to ENTREZID")
+  }
+  
+  # GO enrichment analysis
+  go_enrich <- enrichGO(
+    gene = gene_convert$ENTREZID,
+    OrgDb = organism_db,
+    keyType = "ENTREZID",
+    ont = ontology,
+    readable = TRUE
+  )
+  
+  # Filter terms of interest
+  if (!is.null(keywords) && nrow(go_enrich) > 0) {
+    keyword_pattern <- paste(keywords, collapse = "|")
+    matched_terms <- go_enrich@result %>%
+      filter(str_detect(Description, regex(keyword_pattern, ignore_case = TRUE)))
+    
+    if (!is.null(exclude_terms)) {
+      exclude_pattern <- paste(exclude_terms, collapse = "|")
+      matched_terms <- matched_terms %>%
+        filter(!str_detect(Description, regex(exclude_pattern, ignore_case = TRUE)))
+    }
+    
+    if (nrow(matched_terms) > 0) {
+      go_enrich@result <- matched_terms
+    } else {
+      warning("0 GO terms")
+      return(NULL)
+    }
+  }
+  
+  # Generate plot
+  if (nrow(go_enrich@result) > 0) {
+    enrich_plot <- barplot(go_enrich, showCategory = 15) +
+      theme_minimal() +
+      theme(
+        axis.text.y = element_text(size = 9),
+        plot.caption = element_text(hjust = 0)
+      ) +
+      labs(
+        title = "GO Pathway Enrichment",
+        caption = if (!is.null(keywords)) {
+          paste("Terms related with:", paste(keywords, collapse = ", "))
+        } else {
+          "GO significative terms"
+        }
+      )
+    
+    # Save plot if output path is provided
+    if (!is.null(output_file)) {
+      ggsave(output_file, 
+             plot = enrich_plot,
+             dpi = 1080,
+             height = 7,
+             width = 9)
+    }
+    
+    return(list(
+      enrich_result = go_enrich,
+      plot = enrich_plot,
+      gene_conversion = gene_convert
+    ))
+  } else {
+    warning("No results to show")
+    return(NULL)
+  }
 }
 
 ############################################################
