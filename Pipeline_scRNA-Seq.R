@@ -7,7 +7,7 @@ if (!require("BiocManager", quietly = TRUE))
 
 # If the packages are not installed use this code:
 # BiocManager::install(c("glmGamPoi", "biomaRt", "EnhancedVolcano", "speckle", "lisi", "AnnotationDbi","org.Mm.eg.db"))
-# install.packages(c("Seurat", "Matrix", "tidyverse", "ggvenn", "tibble", "circlize"))
+# install.packages(c("Seurat", "Matrix", "tidyverse", "ggvenn", "tibble", "circlize", "patchwork))
 
 library(Seurat)
 library(SeuratObject)
@@ -26,71 +26,18 @@ library(org.Mm.eg.db)
 library(biomaRt)
 library(tibble)
 library(circlize)
+library(patchwork)
+library(readxl)
+library(openxlsx)
+library(clusterProfiler)
+library(enrichplot)
 
 ############################################################
-# 1. LOAD THE DATA AND CREATE SEURAT OBJECT
+# 1. LOAD THE DATA 
 ############################################################
 
-load_data <- function(matrix_path, 
-                      metadata_path, 
-                      features_path = NULL, 
-                      barcodes_path = NULL, 
-                      tech = "scRNA", 
-                      study_name = "Study") {
-  
-  if (grepl("\\.mtx$", matrix_path)) {
-    counts <- readMM(matrix_path)
-    if (!is.null(features_path)) {
-      features <- read.delim(features_path, header = FALSE)
-      barcodes <- read.delim(barcodes_path, header = FALSE)
-      rownames(counts) <- features[[1]]
-      colnames(counts) <- barcodes[[1]]
-    }
-  } else if (grepl("\\.rds$", matrix_path)) {
-    counts <- readRDS(matrix_path)
-    if (class(counts) == "Seurat") counts <- GetAssayData(counts, "counts")
-  } else {
-    stop("Incorrect format for this Pipeline")
-  }
-  
-  # Adjusting depending on the column names of the metadata
-  metadata <- read.delim(metadata_path, header = TRUE) %>%
-    rename(
-      nCount_RNA = matches("nCount_RNA|nUMI"),
-      nFeature_RNA = matches("nFeature_RNA|nGene"),
-      celltype = matches("celltype|cluster|*cluster*"),
-      time = matches("time|condition|label")
-    ) %>%
-  # Adjust depending on the conditions of the study and the different condition names
-    mutate(
-      time = case_when(
-        grepl("(.*[^0-9]|^)7dpi|Acute|Contusion", time, ignore.case = TRUE) ~ "7dpi",
-        grepl("(.*[^0-9]|^)1dpi", time, ignore.case = TRUE) ~ "1dpi",
-        grepl("(.*[^0-9]|^)Uninjured|Control", time, ignore.case = TRUE) ~ "Uninjured",
-        grepl("(.*[^0-9]|^)3.*wpi", time, ignore.case = TRUE) ~ "21dpi",
-        grepl("(.*[^0-9]|^)6wpi|6wNT|SCI", time, ignore.case = TRUE) ~ "4-6wpi",
-        TRUE ~ time
-      ),
-      technology = tech,
-      dataset = study_name
-    )
-  
-  # Create Seurat Object
-  seurat <- CreateSeuratObject(
-    counts = counts,
-    meta.data = metadata,
-    min.cells = 50,      
-    min.features = 100  
-  )
-  
-  # Quality control metrics
-  removed_cells <- ncol(counts) - ncol(seurat)
-  removed_features <- nrow(counts) - nrow(seurat)
-  
-  # Seurat object characteristics
-  cells <- ncol(seurat)
-  features <- ncol(seurat)
-}
+# As the datasets of single cell RNA-Seq have multiple formats, and each study employs different
+# nomenclatures, you should load your datasets as Seurat objects. Thank you!
 
 ############################################################
 # 2. NORMALIZATION
@@ -110,6 +57,7 @@ cell_annotation <- function(seurat_obj, reference) {
   anchors <- FindTransferAnchors(reference = reference, query = seurat_obj, dims = 1:20)
   predictions <- TransferData(anchorset = anchors, refdata = reference$celltype, dims = 1:20)
   seurat_obj <- AddMetaData(seurat_obj, metadata = predictions)
+  return(seurat_obj)
 }
 
 # Create a list with the Seurat Objects that you want to integrate
@@ -119,13 +67,15 @@ cell_annotation <- function(seurat_obj, reference) {
 # 4. INTEGRATION
 ############################################################  
 
-integration <- function(seurat_list, nfeatures) {
-  features <- SelectIntegrationFeatures(object.list = seurat_list, nfeatures = nfeatures)
+prepare_integration <- function(seurat_list) {
   seurat_list <- lapply(X = seurat_list, FUN = function(x) {x <- ScaleData(x, features =  features)
   x <- RunPCA(x, features = features, npcs = 30)
   x <- RunUMAP(x, dims = 1:20)})
+  return(seurat_list)
+  }
+
+integration <- function(seurat_list, features) {
   anchors_integration <- FindIntegrationAnchors(object.list = seurat_list, dims = 1:20, verbose = TRUE, reduction = "rpca", anchor.features = features, scale = F, normalization.method = "LogNormalize")
-  gc()
   seurat_integrated <- IntegrateData(anchorset = anchors_integration, dims = 1:20, verbose = TRUE, normalization.method = "LogNormalize")
   return(seurat_integrated)
 }
@@ -135,11 +85,23 @@ integration <- function(seurat_list, nfeatures) {
 ############################################################  
 
 umap_visualization <- function(seurat_list, path) {
-  umap <- DimPlot(seurat_list [[1]], split.by = "dataset", group.by = "predicted.id", label = T, label.size = 3) + theme(axis.text.x = element_text(angle = 60, hjust = 1, size = 7)) + labs(x = "UMAP 1", y = "UMAP 2")
-  umap2 <- DimPlot(seurat_list [[2]], split.by = "dataset", group.by = "predicted.id", label = T, label.size = 3) + theme(axis.text.x = element_text(angle = 60, hjust = 1, size = 7)) + labs(x = "UMAP 1", y = "UMAP 2")
-  umap3 <- DimPlot(seurat_list [[3]], split.by = "dataset", group.by = "predicted.id", label = T, label.size = 3) + theme(axis.text.x = element_text(angle = 60, hjust = 1, size = 7)) + labs(x = "UMAP 1", y = "UMAP 2")
-  umap + umap2 + umap3
-  ggsave(path, umap + umap2 + umap3, dpi = 1080, height = 14, width = 8)
+  
+  plot_list <- list()
+  for (i in seq_along(seurat_list)) {
+    plot_list[[i]] <- DimPlot(
+      seurat_list[[i]],
+      split.by = "dataset",
+      group.by = "predicted.id",
+      label = TRUE,
+      label.size = 3
+    ) +
+      theme(axis.text.x = element_text(angle = 60, hjust = 1, size = 7)) +
+      labs(x = "UMAP 1", y = "UMAP 2")
+  }
+  
+  combined_plot <- Reduce(`+`, plot_list)
+  
+  ggsave(path, combined_plot, dpi = 1080, height = 14, width = 8)
 }
 
 ############################################################
@@ -148,10 +110,25 @@ umap_visualization <- function(seurat_list, path) {
 
 metadata_cleaning <- function(seurat_obj) {
   metadata <- seurat_obj@meta.data
-  metadata <- metadata %>% select(matches("nCount_RNA|nFeature_RNA|time|celltype|technology|dataset|predicted.id"))
+  selected_columns <- c("nCount_RNA", "nFeature_RNA", "time", "celltype", "technology", "dataset", "predicted.id")
+  metadata <- metadata[, selected_columns, drop = FALSE]
   metadata$celltype <- NULL
   colnames(metadata)[colnames(metadata) == "predicted.id"] <- "celltype"
   seurat_obj@meta.data <- metadata
+  return(seurat_obj)
+}
+
+metadata_cleaning2 <- function(seurat_obj, reference_dataset) {
+  metadata <- seurat_obj@meta.data
+  selected_columns <- c("nCount_RNA", "nFeature_RNA", "time", "celltype", "technology", "dataset", "predicted.id")
+  existing_columns <- selected_columns[selected_columns %in% colnames(metadata)]
+  metadata <- metadata[, existing_columns, drop = FALSE]
+  metadata$celltype <- ifelse(metadata$dataset == reference_dataset & is.na(metadata$predicted.id),
+                              metadata$celltype,  
+                              metadata$predicted.id)  
+  metadata$predicted.id <- NULL
+  seurat_obj@meta.data <- metadata
+  return(seurat_obj)
 }
 
 ############################################################
@@ -159,10 +136,12 @@ metadata_cleaning <- function(seurat_obj) {
 ############################################################
 
 descriptive <- function(seurat_obj) {
-  table(seurat_obj@celltype)
-  table(seurat_obj@time)
-  table(seurat_obj@dataset)
+  df_celltype <- as.data.frame(table(seurat_obj@meta.data$celltype))
+  df_time <- as.data.frame(table(seurat_obj@meta.data$time))
+  df_dataset <- as.data.frame(table(seurat_obj@meta.data$dataset))
+  return(list(celltype = df_celltype, time = df_time, dataset = df_dataset))
 }
+
 
 ############################################################
 # *. EVALUATION OF THE INTEGRATION
@@ -236,10 +215,6 @@ plot_integration_umap <- function(seurat_obj,
                                   label_size = 3,
                                   output_dir = "~/R/Figures/",
                                   prefix = "integrated") {
-  
-  seurat_obj <- ScaleData(seurat_obj)
-  seurat_obj <- RunPCA(seurat_obj, verbose = FALSE, npcs = max(dims))
-  seurat_obj <- RunUMAP(seurat_obj, dims = dims)
   
   plots <- list()
   
@@ -334,23 +309,6 @@ evaluate_integration_lisi <- function(seurat_obj,
             "Please consider this steps in the downstream analysis:\n",
             "1. Adjust for cell proportions\n",
             "2. Adjust for technical parameters")
-    
-    # Calculate cell proportions
-    barcodes <- rownames(metadata)
-    cell_proportions <- metadata %>%
-      group_by(.data[[batch_var]], .data[[time_var]], .data[[celltype_var]]) %>%
-      summarise(count = n(), .groups = "drop") %>%
-      group_by(.data[[batch_var]], .data[[time_var]]) %>%
-      mutate(prop = count / sum(count)) %>%
-      select(.data[[batch_var]], .data[[time_var]], .data[[celltype_var]], prop)
-    
-    # Add proportions to metadata
-    seurat_obj@meta.data <- metadata %>%
-      left_join(cell_proportions, 
-                by = c(batch_var, time_var, celltype_var))
-    
-    rownames(seurat_obj@meta.data) <- barcodes
-    colnames(seurat_obj) <- barcodes
   }
   
   # Generate plots if requested
@@ -391,51 +349,86 @@ evaluate_integration_lisi <- function(seurat_obj,
 }
 
 ############################################################
+# *. CELL PROPORTION
+############################################################
+
+celltype_proportions <- function(seurat_obj, dataset_var = "dataset", time_var = "time", celltype_var = "celltype") {
+  metadata <- seurat_obj@meta.data
+  barcodes <- rownames(metadata)
+  
+  cell_proportions <- metadata %>%
+    dplyr::group_by(.data[[dataset_var]], .data[[time_var]], .data[[celltype_var]]) %>%
+    dplyr::summarise(count = dplyr::n(), .groups = "drop") %>%
+    dplyr::group_by(.data[[dataset_var]], .data[[time_var]]) %>%
+    dplyr::mutate(prop = count / sum(count)) %>%
+    dplyr::select(
+      !!dataset_var := .data[[dataset_var]],
+      !!time_var := .data[[time_var]],
+      !!celltype_var := .data[[celltype_var]],
+      prop
+    )
+  
+  prop_table <- cell_proportions %>%
+    tidyr::pivot_wider(
+      names_from = .data[[celltype_var]],
+      values_from = prop,
+      values_fill = 0
+    )
+  
+  seurat_obj@meta.data <- metadata %>%
+    dplyr::left_join(
+      prop_table,
+      by = setNames(c(dataset_var, time_var), c(dataset_var, time_var))
+    )
+  
+  rownames(seurat_obj@meta.data) <- barcodes
+  return(seurat_obj)
+}
+
+
+############################################################
 # *. CELL CYCLE SCORE
 ############################################################
 
-plot_cell_cycle <- function(seurat_obj,
+plot_cell_cycle <- function(seurat_obj, 
+                            cell_cycle_markers_path = "~/R/Data/Mus_musculus.csv",
+                            output_path = NULL,
                             reduction = "pca",
                             group_var = "Phase",
                             split_var = "time",
-                            dims = 1:20,
-                            run_pca = FALSE,
-                            output_path = "~/R/Figures/CC_plot.png",
                             plot_height = 7,
                             plot_width = 9,
                             dpi = 1080) {
-
-  if (!"RNA" %in% names(seurat_obj@assays) || 
-    is.null(GetAssayData(seurat_obj, slot = "scale.data"))) {
-    message("Running ScaleData...")
-    seurat_obj <- ScaleData(seurat_obj)
-  }
-
-  if (run_pca || !"pca" %in% names(seurat_obj@reductions)) {
-    message("Running PCA...")
-    seurat_obj <- RunPCA(seurat_obj, npcs = max(dims), verbose = FALSE)
-  }
-
-  cc_plot <- DimPlot(seurat_obj,
-                     reduction = reduction,
-                     group.by = group_var,
-                     split.by = split_var) +
-                     theme_minimal() +
-                     labs(title = "Cell Cycle Phase Distribution",
-                     subtitle = paste("Split by", split_var))
-
-  if (!is.null(output_path)) {
-    dir.create(dirname(output_path), showWarnings = FALSE, recursive = TRUE)
-    ggsave(output_path, 
-           plot = cc_plot,
-           height = plot_height,
-           width = plot_width,
-           dpi = dpi)
-    message("Plot saved to: ", output_path)
-  }
   
-  return(cc_plot)
+  cell_cycle_markers <- read.csv(cell_cycle_markers_path)
+  
+  s_genes <- cell_cycle_markers %>% dplyr::filter(phase == "S") %>% pull("geneID")
+  g2m_genes <- cell_cycle_markers %>% dplyr::filter(phase == "G2/M") %>% pull("geneID")
+  
+  s_genes <- AnnotationDbi::select(org.Mm.eg.db, 
+                                   keys = s_genes, 
+                                   keytype = "ENSEMBL", 
+                                   columns = c("SYMBOL"))
+  g2m_genes <- AnnotationDbi::select(org.Mm.eg.db, 
+                                     keys = g2m_genes, 
+                                     keytype = "ENSEMBL", 
+                                     columns = c("SYMBOL"))
+  
+  seurat_obj <- CellCycleScoring(seurat_obj, 
+                                 g2m.features = g2m_genes$SYMBOL, 
+                                 s.features = s_genes$SYMBOL)
+  
+  cc_score <- DimPlot(seurat_obj, 
+                      reduction = reduction, 
+                      group.by = group_var, 
+                      split.by = split_var)
+  
+  ggsave(output_path, cc_score, dpi = dpi, height = plot_height, width = plot_width)
+  
+  message("Plot saved to: ", output_path)
+  return(seurat_obj)
 }
+
 
 ############################################################
 # *. FILTER ECM GENES
@@ -445,11 +438,11 @@ filter_ecm_genes <- function(seurat_obj, ecm_genes_path) {
   ECM <- read_excel(ecm_genes_path)
   genes_to_keep <- ECM$Gene
   rownames_seurat <- rownames(seurat_obj)
-  rows_to_keep <- which(rownames_obj %in% genes_to_keep)
+  rows_to_keep <- which(rownames_seurat %in% genes_to_keep)  # Cambio aquí
   seurat_integrated_ME <- seurat_obj[rows_to_keep, ]
-  paste("ECM Genes present in the dataset:", nrow(seurat_integrated_ME))
+  message("ECM Genes present in the dataset:", nrow(seurat_integrated_ME))
   return(seurat_integrated_ME)
-} 
+}
 
 ############################################################
 # 5. DIFFERENTIAL EXPRESSION ANALYSIS
@@ -479,6 +472,7 @@ DE_Analysis <- function(seurat_obj,
   )
   
   if (!is.null(cell.prop)) {
+    cell.prop <- c("Astrocytes", "Neurons", "OPCs", "Oligodendrocytes", "Microglia", "Endothelial")
     params$latent.vars <- cell.prop
   }
   
@@ -719,8 +713,70 @@ HeatMap <- function(seurat_obj,
 }
 
 
-############################################################
-# APPLICATION OF THE PIPELINE
-############################################################
+#####################################################################################################
+################################ APPLICATION OF THE PIPELINE ########################################
+#####################################################################################################
 
+# 1. Load the data as Seurat Objects
+load("~/R/Data/Seurats_For_Acute.RData")
 
+# 2. Normalization
+seurat_norm <- normalize_data(seurat_obj = seurat)
+seurat2_norm <- normalize_data(seurat_obj = seurat2)
+seurat3_norm <- normalize_data(seurat_obj = seurat3)
+seurat5_norm <- normalize_data(seurat_obj = seurat5)
+rm(seurat, seurat2, seurat3, seurat5)
+
+# 3. Cell Annotation
+seurat_annot <- cell_annotation(seurat_obj = seurat_norm, reference = seurat5_norm)
+seurat2_annot <- cell_annotation(seurat_obj = seurat2_norm, reference = seurat5_norm)
+seurat3_annot <- cell_annotation(seurat_obj = seurat3_norm, reference = seurat5_norm)
+rm(seurat_norm, seurat2_norm, seurat3_norm, seurat5_norm)
+
+# 4. Integration
+seurat_list <- list(seurat_annot, seurat2_annot, seurat3_annot)
+rm(seurat_annot, seurat2_annot, seurat3_annot)
+features <- SelectIntegrationFeatures(object.list = seurat_list, nfeatures = 3500)
+seurat_list_prep <- prepare_integration(seurat_list)
+# features <- c(features, genes_of_interest) For sub-chronic or specific gene
+seurat_integrated <- integration(seurat_list = seurat_list_prep, features = features)
+Idents(seurat_integrated) <- "time"
+
+# 5. UMAP before Integration
+umap_before_integration <- umap_visualization(seurat_list = seurat_list, path = "~/R/Figures/UMAP_Before_Integration.png")
+
+# 6. Post-Integration Steps
+# Metadata
+seurat_integrated <- metadata_cleaning(seurat_integrated)
+# Descriptive
+descriptive(seurat_obj = seurat_integrated)
+# Preparation of evaluation of integration
+seurat_integrated <- ScaleData(seurat_integrated)
+seurat_integrated <- RunPCA(seurat_integrated, verbose = FALSE)
+seurat_integrated <- RunUMAP(seurat_integrated, dims = 1:20)
+# UMAP
+plot_integration_umap(seurat_obj = seurat_integrated, prefix = "Acute")
+# RLE
+plot_rle(seurat_obj = seurat_integrated, output_path = "~/R/Data/RLE-Acute.png")
+plot_rle(seurat_obj = seurat_integrated, by_dataset = T, output_path = "~/R/Data/RLE-Acute(Dataset).png")
+# LISI
+evaluate_integration_lisi(seurat_obj = seurat_integrated, lisi_threshold = 2)
+# Cell proportion calculation
+seurat_integrated <- celltype_proportions(seurat_obj = seurat_integrated)
+
+# 7. Cell cycle 
+seurat_integrated <- plot_cell_cycle(seurat_obj = seurat_integrated, output_path = "~/R/Figures/CC_Acute.png")
+
+# 8. ECM genes
+seurat_ME <- filter_ecm_genes(seurat_obj = seurat_integrated, ecm_genes_path = "~/R/Data/MAIN_ECM_Proteome.xlsx")
+seurat_ME@meta.data <- seurat_ME@meta.data %>%
+  rename(`Endothelial cells` = "Endothelial")
+
+# 9. DGE
+DEG <- DE_Analysis(seurat_obj = seurat_ME, condition = "7dpi", control = "Uninjured", cell.prop = T, plot_path = "~/R/Figures/Volcano_Acute.png", plot_title = "Differential expression analysis in Acute vs Uninjured conditions", output_file = "~/R/Data/DEG_Acute_7dpi.xlsx" )
+
+# 10. Enrichment analysis
+run_enrichment(DEG_results = DEG, output_file = "~/R/Figures/Go_Enrich_Acute.png")
+
+# 11. Cell type DGE
+HeatMap(seurat_obj = seurat_ME)
