@@ -17,6 +17,7 @@ library(tidyr)
 library(ggrepel)
 library(stringr)
 library(purrr)
+library(venn)
 
 # Data of DEGs
 times <- c("Acute (7 dpi)", "Sub-Chronic (4-6 wpi)", "Sub-Acute (21 dpi)", "First-Day (1 dpi)")
@@ -111,19 +112,4 @@ ggsave("~/R/Figures/Layout.png",timevariation, dpi = 1080, width = 14, height = 
 ```
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-############################################################################
 
