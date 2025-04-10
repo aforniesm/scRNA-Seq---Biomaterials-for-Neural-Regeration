@@ -31,6 +31,7 @@ library(readxl)
 library(openxlsx)
 library(clusterProfiler)
 library(enrichplot)
+library(ComplexHeatmap)
 
 ############################################################
 # 1. LOAD THE DATA 
@@ -75,6 +76,7 @@ prepare_integration <- function(seurat_list) {
   }
 
 integration <- function(seurat_list, features) {
+  # Change the method rpca for cca in case you have batch effects after rpca
   anchors_integration <- FindIntegrationAnchors(object.list = seurat_list, dims = 1:20, verbose = TRUE, reduction = "rpca", anchor.features = features, scale = F, normalization.method = "LogNormalize")
   seurat_integrated <- IntegrateData(anchorset = anchors_integration, dims = 1:20, verbose = TRUE, normalization.method = "LogNormalize")
   return(seurat_integrated)
@@ -84,42 +86,29 @@ integration <- function(seurat_list, features) {
 # *. UMAP BEFORE INTEGRATION (Add more maps if you integer more datasets)
 ############################################################  
 
-umap_visualization <- function(seurat_list, path) {
-  
-  plot_list <- list()
-  for (i in seq_along(seurat_list)) {
-    plot_list[[i]] <- DimPlot(
-      seurat_list[[i]],
+umap_visualization <- function(seurat_obj, path, groupby) {
+    umap_plot <- DimPlot(
+      seurat_obj,
       split.by = "dataset",
-      group.by = "predicted.id",
+      group.by = grouby,
       label = TRUE,
       label.size = 3
-    ) +
-      theme(axis.text.x = element_text(angle = 60, hjust = 1, size = 7)) +
-      labs(x = "UMAP 1", y = "UMAP 2")
-  }
+    ) + theme(axis.text.x = element_text(angle = 60, hjust = 1, size = 7)) 
+    + labs(x = "UMAP 1", y = "UMAP 2")
+
+  umap_plot
   
-  combined_plot <- Reduce(`+`, plot_list)
-  
-  ggsave(path, combined_plot, dpi = 1080, height = 14, width = 8)
+  ggsave(path, umap_plot, dpi = 1080, height = 14, width = 8)
 }
+
 
 ############################################################
 # *. METADATA
 ############################################################  
 
-metadata_cleaning <- function(seurat_obj) {
+metadata_cleaning <- function(seurat_obj, reference_dataset) {
   metadata <- seurat_obj@meta.data
-  selected_columns <- c("nCount_RNA", "nFeature_RNA", "time", "celltype", "technology", "dataset", "predicted.id")
-  metadata <- metadata[, selected_columns, drop = FALSE]
-  metadata$celltype <- NULL
-  colnames(metadata)[colnames(metadata) == "predicted.id"] <- "celltype"
-  seurat_obj@meta.data <- metadata
-  return(seurat_obj)
-}
-
-metadata_cleaning2 <- function(seurat_obj, reference_dataset) {
-  metadata <- seurat_obj@meta.data
+  # Select the important columns (adaptable for each case)
   selected_columns <- c("nCount_RNA", "nFeature_RNA", "time", "celltype", "technology", "dataset", "predicted.id")
   existing_columns <- selected_columns[selected_columns %in% colnames(metadata)]
   metadata <- metadata[, existing_columns, drop = FALSE]
@@ -154,7 +143,7 @@ plot_rle <- function(seurat_obj,
                      layer = "data",
                      n_genes = 5000,
                      n_cells = 150,
-                     by_dataset = FALSE,
+                     by_dataset = TRUE,
                      y_limits = if (by_dataset) c(-0.2, 0.2) else c(-0.65, 0.65),
                      seed = if (by_dataset) 34 else 45,
                      output_path = NULL) {
@@ -239,6 +228,7 @@ plot_integration_umap <- function(seurat_obj,
   return(plots)
 }
 
+# LISI 
 evaluate_integration_lisi <- function(seurat_obj,
                                  batch_var = "dataset",
                                  celltype_var = "celltype",
@@ -637,16 +627,15 @@ HeatMap <- function(seurat_obj,
                     ident_column = "time",
                     condition = "7dpi",
                     control = "Uninjured",
-                    celltypes = c("Astrocytes", "Neurons", "Microglia", "OPCs", "Oligodendrocytes", "Endothelial"),
-                    genes_up = NULL,
-                    genes_down = NULL,
+                    celltypes = c("Astrocytes", "Neurons", "Microglia", "OPCs", "Oligodendrocytes", "Endothelial cells"),
                     logfc_threshold = 0,
                     min_pct = 0.05,
                     test_use = "MAST",
                     output_file = "~/R/Figures/Heatmap_Acute.png",
                     plot_width = 14,
                     plot_height = 7,
-                    plot_dpi = 1080) {
+                    plot_dpi = 1080,
+                    genes_interest = NULL) {
   
   # Set identity classes
   Idents(seurat_obj) <- ident_column
@@ -679,9 +668,9 @@ HeatMap <- function(seurat_obj,
   combined_results <- bind_rows(deg_results)
   
   # Filter genes if provided
-  if (!is.null(genes_up) | !is.null(genes_down)) {
+  if (!is.null(genes_interest)) {
     combined_results <- combined_results %>%
-      filter(Gene %in% genes_down | Gene %in% genes_up)
+      filter(Gene %in% genes_interest)
   }
   
   # Prepare heatmap data
@@ -690,8 +679,6 @@ HeatMap <- function(seurat_obj,
     pivot_wider(names_from = celltype, values_from = avg_log2FC) %>%
     column_to_rownames("Gene") %>%
     as.matrix()
-  
-  # Replace NA with 0
   heatmap_data[is.na(heatmap_data)] <- 0
   
   # Create heatmap
@@ -703,18 +690,13 @@ HeatMap <- function(seurat_obj,
     name = "log2FC"
   )
   
-  # Save plot
-  if (!is.null(output_file)) {
-    ggsave(output_file, heatmap, dpi = plot_dpi, height = plot_height, width = plot_width)
-  }
-  
   # Return the heatmap
   return(heatmap)
 }
 
 
 #####################################################################################################
-################################ APPLICATION OF THE PIPELINE ########################################
+################################ EXAMPLE OF APPLICATION OF THE PIPELINE ########################################
 #####################################################################################################
 
 # 1. Load the data as Seurat Objects
@@ -769,14 +751,24 @@ seurat_integrated <- plot_cell_cycle(seurat_obj = seurat_integrated, output_path
 
 # 8. ECM genes
 seurat_ME <- filter_ecm_genes(seurat_obj = seurat_integrated, ecm_genes_path = "~/R/Data/MAIN_ECM_Proteome.xlsx")
+# For cell types with 2 words
 seurat_ME@meta.data <- seurat_ME@meta.data %>%
   rename(`Endothelial cells` = "Endothelial")
 
 # 9. DGE
 DEG <- DE_Analysis(seurat_obj = seurat_ME, condition = "7dpi", control = "Uninjured", cell.prop = T, plot_path = "~/R/Figures/Volcano_Acute.png", plot_title = "Differential expression analysis in Acute vs Uninjured conditions", output_file = "~/R/Data/DEG_Acute_7dpi.xlsx" )
 
+# 9.1 Top DEG
+DEG_upregulated <- DEG %>%
+  arrange(desc(avg_log2FC)) %>% head(10)
+DEG_downregulated <- DEG %>%
+  arrange(desc(avg_log2FC)) %>% tail(10)
+
+DEG_TOP <- bind_rows(DEG_downregulated, DEG_upregulated)
+genes_interest <- DEG_TOP$Gene
+
 # 10. Enrichment analysis
 run_enrichment(DEG_results = DEG, output_file = "~/R/Figures/Go_Enrich_Acute.png")
 
 # 11. Cell type DGE
-HeatMap(seurat_obj = seurat_ME)
+HeatMap(seurat_obj = seurat_ME, genes_interest = genes_interest)
