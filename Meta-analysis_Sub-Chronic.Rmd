@@ -9,8 +9,6 @@ knitr::opts_chunk$set(echo = FALSE)
 ```
 
 ```{r}
-library(tibble)
-library(harmony)
 library(Seurat)
 library(Matrix)
 library(biomaRt)
@@ -29,12 +27,10 @@ library(presto)
 library(enrichplot)
 library(clusterProfiler)
 library(MAST)
-library(ggvenn)
-library(openxlsx)
 library(plotly)
+library(openxlsx)
 library(patchwork)
-library(reshape2)
-library(scater)
+library(tibble)
 ```
 
 1. Dataset 1 - Matson 2022
@@ -173,9 +169,13 @@ paste("Features:", nrow(seurat2) + nrow(seurat4) + nrow(seurat5))
 
 # Quality control of cells
 print(paste("Cells removed for QC:", remove_cells2 + remove_cells4 + remove_cells5))
-print(paste("Cells of other experimental conditionns:", remove_cells2_f + remove_cells4_f + remove_cells5_f))
+print(paste("Cells of other experimental conditionns:", (remove_cells2_f + remove_cells4_f + remove_cells5_f) - (remove_cells2 + remove_cells4 + remove_cells5)))
 paste("Cells:", ncol(seurat2) + ncol(seurat4) + ncol(seurat5))
 
+```
+
+```{r}
+save.image(file = "~/R/Data/Seurats_Chronic.RData")
 ```
 
 Normalization
@@ -226,7 +226,7 @@ seurat_list <- list(seurat2_norm, seurat4_norm, seurat5_norm)
 
 features <- SelectIntegrationFeatures(
   object.list = seurat_list, 
-  nfeatures = 10000)
+  nfeatures = 3500)
 
 seurat_list <- lapply(X = seurat_list, FUN = function(x) {x <- ScaleData(x, features =  features) 
 x <- RunPCA(x, features = features, npcs = 30)
@@ -250,7 +250,7 @@ umap5 <- DimPlot(seurat5_norm, split.by = "dataset", group.by = "celltype", labe
 
 umap2 + umap4 + umap5
 
-ggsave("~/R/Figures/umap_bef_int_sub-chronic.png", umap2 + umap4 + umap5, dpi = 1080, height = 12, width = 8)
+ggsave("~/R/Figures/UMAP_BeforeIntegration_Sub-Chronic.png", umap2 + umap4 + umap5, dpi = 1080, height = 12, width = 8)
 ```
 
 6. Integrate the three datasets
@@ -264,8 +264,7 @@ genes_of_interest <- c(
   "Fbn1", "Fn1", "Hapln2", "Itih3", "Lgals3",
   "Lgi1", "S100a6", "Serpina3n", "Serpinb1a",
   "Serpind1", "Spock3", "Spp1", "Tgfb1", "Thbs1",
-  "Thbs2", "Tnr", "Vwa1", "Vwf"
-)
+  "Thbs2", "Tnr", "Vwa1", "Vwf")
 
 features <- c(features, genes_of_interest)
 
@@ -273,17 +272,17 @@ features <- unique(features)
 
 rm(seurat4_norm, anchors)
 
-anchors_integration <- FindIntegrationAnchors(object.list = seurat_list, dims = 1:20, verbose = TRUE, reduction = "rpca", anchor.features = features)
+anchors_integration <- FindIntegrationAnchors(object.list = seurat_list, dims = 1:30, verbose = TRUE, reduction = "cca", anchor.features = features, scale = F, normalization.method = "LogNormalize", k.anchor = 50)
 
 gc()
 
-seurat_integrated <- IntegrateData(anchorset = anchors_integration, dims = 1:20, verbose = TRUE)
+seurat_integrated <- IntegrateData(anchorset = anchors_integration, dims = 1:30, verbose = TRUE, normalization.method = "LogNormalize")
 
 rm(seurat_list, anchors_integration)
 
 gc()
 
-save.image(file = "C:\\Users\\afornies\\Downloads\\Sub-Chronic_Data.RData")
+save.image(file = "~/R/Downloads/Sub-Chronic_Data.RData")
 ```
 
 * Correct metadata issues
@@ -310,89 +309,13 @@ rm(predictions, metadata)
 
 
 ```{r}
+# Descriptive
 table(seurat_integrated$celltype)
 table(seurat_integrated$time)
+table(seurat_integrated$dataset)
+
 ```
 
-
-RLE after integration
-
-```{r}
-
-set.seed(123)
-
-gene_names <- rownames(seurat_integrated[["integrated"]])
-sample_genes <- if (length(gene_names) < 5000) gene_names else sample(gene_names, 5000)
-
-cell_names <- colnames(seurat_integrated[["integrated"]])
-sample_cells <- if (length(cell_names) < 150) cell_names else sample(cell_names, 150)
-
-data <- as.matrix(GetAssayData(seurat_integrated, assay = "integrated", layer = "data"))[sample_genes, sample_cells]
-
-medians <- apply(data, 1, median)
-rle_values <- sweep(log1p(data), 1, medians, "-")
-rle_df <- melt(rle_values)
-colnames(rle_df) <- c("Gene", "Cell", "RLE")
-
-rle_df <- rle_df[is.finite(rle_df$RLE), ]
-
-y_limits <- c(-0.65,0.65)
-
-rle1 <- ggplot(rle_df, aes(x = Cell, y = RLE)) +
-  geom_boxplot(outlier.shape = NA) +
-  theme(axis.text.x = element_blank()) +
-  labs(title = "RLE plot after Integration", y = "Relative Log Expression") + ylim(y_limits)
-
-rle1
-
-ggsave("~/R/Figures/rle1_Sub-Chronic.png", rle1, dpi = 1080, height = 7, width = 8)
-```
-
-RLE after integration by DATASETS
-
-```{r}
-
-set.seed(178)
-
-gene_names <- rownames(seurat_integrated[["integrated"]])
-sample_genes <- if (length(gene_names) < 5000) gene_names else sample(gene_names, 5000)
-
-cell_names <- colnames(seurat_integrated[["integrated"]])
-sample_cells <- if (length(cell_names) < 5000) cell_names else sample(cell_names, 5000)
-
-data <- as.matrix(GetAssayData(seurat_integrated, assay = "integrated", layer = "data"))[sample_genes, sample_cells]
-
-medians <- apply(data, 1, median)
-rle_values <- sweep(log1p(data), 1, medians, "-")
-rle_df <- reshape2::melt(rle_values)
-colnames(rle_df) <- c("Gene", "Cell", "RLE")
-
-rle_df <- rle_df[is.finite(rle_df$RLE), ]
-
-sample_metadata <- seurat_integrated@meta.data[sample_cells, ]
-rle_df$Dataset <- sample_metadata[rle_df$Cell, "dataset"]
-
-y_limits <- c(-0.2, 0.2)
-
-rle_by_dataset <- ggplot(rle_df, aes(x = Dataset, y = RLE, fill = Dataset)) +
-  geom_boxplot(outlier.shape = NA, show.legend = FALSE) + 
-  theme_minimal() +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
-    plot.title = element_text(hjust = 0.5, face = "bold")
-  ) +
-  labs(
-    title = "RLE plot after Integration by Dataset", 
-    y = "Relative Log Expression",
-    x = NULL  #
-  ) + 
-  ylim(y_limits) +
-  scale_fill_brewer(palette = "Set3")  
-
-rle_by_dataset
-
-ggsave("~/R/Figures/rle_datasets_Sub-Chronic.png", rle_by_dataset, dpi = 1080, height = 7, width = 8)
-```
 
 Cell Cycle Score
 
@@ -418,8 +341,6 @@ seurat_integrated <- CellCycleScoring(seurat_integrated, g2m.features = g2m_gene
 
 UMAP after integration
 
-ScaleData is needed for PCA
-
 ```{r}
 seurat_integrated <- ScaleData(seurat_integrated)
 seurat_integrated <- RunPCA(seurat_integrated, verbose = T, dims = 1:20) 
@@ -427,14 +348,19 @@ seurat_integrated <- RunUMAP(seurat_integrated, dims = 1:20, reduction = "pca")
 
 umap <- DimPlot(seurat_integrated, split.by = "dataset", group.by = "celltype", label = T, label.size = 3) + theme(axis.text.x = element_text(angle = 60, hjust = 1, size = 9)) + labs(x = "UMAP 1", y = "UMAP 2")
 umap
-ggsave("~/R/Figures/umap_post_int_sub-chronic.png", umap, dpi = 1080, height = 7, width = 12)
+ggsave("~/R/Figures/UMAP_PostIntegration_Sub-Chronic.png", umap, dpi = 1080, height = 7, width = 12)
 
 celltype <- DimPlot(seurat_integrated, group.by = "celltype") + ggtitle("Celltypes")
 celltype
-ggsave("~/R/Figures/cell_post_int_sub-chronic.png", celltype, dpi = 1080, height = 7, width = 10)
+
+dataset <- DimPlot(seurat_integrated, group.by = "dataset") + ggtitle("Celltypes")
+dataset
+
+ggsave("~/R/Figures/Cells_Sub-Chronic.png", celltype, dpi = 1080, height = 7, width = 10)
+ggsave("~/R/Figures/Dataset_Sub-Chronic.png", dataset, dpi = 1080, height = 7, width = 10)
 ```
 
-Checking Cell Cycle Influence
+Possible covariates
 
 ```{r}
 cc_score <- DimPlot(seurat_integrated,
@@ -442,7 +368,19 @@ cc_score <- DimPlot(seurat_integrated,
         group.by= "Phase",
         split.by = "time")
 cc_score
-ggsave("~/R/Figures/CC_sub-chronic.png", cc_score, dpi = 1080, height = 7, width = 9)
+ggsave("~/R/Figures/CC_Sub-Chronic.png", cc_score, dpi = 1080, height = 7, width = 9)
+
+# Adjusting not necessary, no differences between cells in different CC Phase
+
+pca_dataset <- DimPlot(seurat_integrated,
+        reduction = "pca",
+        group.by= "dataset")
+
+ggsave("~/R/Figures/PCA_Dataset_Sub-Chronic.png", pca_dataset, dpi = 1080, height = 7, width = 9)
+
+
+# Not batch effects due to dataset of origin
+
 ```
 
 LISI
@@ -537,7 +475,7 @@ DEG$Gene <- rownames(DEG)
 
 volcanoplot <- EnhancedVolcano(DEG, lab = rownames(DEG), x = "avg_log2FC", y = "p_val_adj", pCutoff = 0.05, FCcutoff = 0.75, title = "Differential expression between Uninjured and Sub-Chronic conditions", drawConnectors = T, labSize = 3)
 
-ggsave("~/R/Figures/Volcano1_sub-chronic.png", volcanoplot, dpi = 1080, height = 7, width = 12)
+ggsave("~/R/Figures/Volcano_Sub-Chronic.png", volcanoplot, dpi = 1080, height = 7, width = 12)
 
 write.xlsx(DEG, "~/R/Data/DEG_Sub-Chronic.xlsx")
 
@@ -549,7 +487,7 @@ DEG2$p_val_adj <- ifelse(DEG2$p_val_adj == 0, 1e-305, DEG2$p_val_adj)
 
 volcanoplot <- EnhancedVolcano(DEG2, lab = rownames(DEG2), x = "avg_log2FC", y = "p_val_adj", pCutoff = 0.05, FCcutoff = 0.75, title = "Differential expression between Uninjured and Sub-Acute conditions", drawConnectors = T, labSize = 3)
 
-ggsave("~/R/Figures/Volcano2_sub-chronic.png", volcanoplot, dpi = 1080, height = 7, width = 12)
+ggsave("~/R/Figures/Volcano_Sub-Acute.png", volcanoplot, dpi = 1080, height = 7, width = 12)
 
 write.xlsx(DEG2, "~/R/Data/DEG_Sub-Acute.xlsx")
 
@@ -594,8 +532,9 @@ volcano_plot2 <- ggplot(DEG_matrisome, aes(x = avg_log2FC, y = -log10(p_val_adj)
 
 ggplotly(volcano_plot2)
 
-ggsave("~/R/Figures/Volcano3_sub-chronic.png", volcano_plot2, dpi = 1080, height = 7, width = 9)
+ggsave("~/R/Figures/Volcano_ECM_Sub-Chronic.png", volcano_plot2, dpi = 1080, height = 7, width = 9)
 ```
+For Sub-Chronic
 
 Enrichment analysis
 
@@ -628,26 +567,22 @@ go_enrich_barplot <- barplot(go_enrich, showCategory = terms_of_interest, color 
   ggtitle("GO ENRICHMENT ANALYSIS OF DEG") + labs(caption = "GO Terms Filtered by Spinal Cord Injury related Biological Process")
 go_enrich_barplot
 
-ggsave("~/R/Figures/GO_sub-chronic.png", go_enrich_barplot, dpi = 1080, height = 7, width = 9)
+ggsave("~/R/Figures/Enrichment_Analysis_Sub-Chronic.png", go_enrich_barplot, dpi = 1080, height = 7, width = 9)
 
 ```
 
-
-For different cell types
-
-Dotplot
 
 ```{r}
 
 DEG$baseline_exp <- 0
 
 DEG_upregulated <- DEG %>%
-  arrange(desc(avg_log2FC)) %>% head(15)
+  arrange(desc(avg_log2FC)) %>% head(10)
 
 DEG_downregulated <- DEG %>%
-  arrange(desc(avg_log2FC)) %>% tail(15)
+  arrange(desc(avg_log2FC)) %>% tail(10)
 
-DEG_TOP <- merge(DEG_downregulated, DEG_upregulated)
+DEG_TOP <- bind_rows(DEG_downregulated, DEG_upregulated)
 
 # DOTPLOT
 genes_interest <- c(DEG_upregulated$Gene, DEG_downregulated$Gene)
@@ -658,7 +593,7 @@ seurat_integrated_ME@meta.data$celltype <- factor(seurat_integrated_ME@meta.data
 celltype_DEG <- DotPlot(seurat_integrated_ME, features = unique(genes_interest), group.by = "celltype", split.by = "time", dot.scale = 5, cols = c("red","green", "blue")) + theme_minimal() + labs(title = "Differential Expression of Genes by Time and Cell Type") + theme(axis.text.x = element_text(angle = 45, hjust = 1))
 celltype_DEG
 
-ggsave("~/R/Figures/dot_sub-chronic.png", celltype_DEG, dpi = 1080, height = 7, width = 9)
+ggsave("~/R/Figures/DotPlot_Sub-Chronic.png", celltype_DEG, dpi = 1080, height = 7, width = 9)
 
 ```
 
@@ -719,92 +654,134 @@ heatmap <- Heatmap(
   col = circlize::colorRamp2(c(-7, 0, 7), c("blue", "white", "red")),
   row_names_gp = gpar(fontsize = 8),
   column_names_gp = gpar(fontsize = 8),
-  name = "log2FC"
+  name = "log2FC", row_title = "Genes", row_title_side = "right", column_title = "Cell types", column_title_side = "bottom"
+)
+heatmap
+```
+
+For Sub-Acute
+
+Enrichment analysis
+
+```{r}
+
+relevant_genes2 <- subset(DEG2, p_val_adj < 0.05 & abs(avg_log2FC) > 0.75)
+
+relevant_genes2 <- rownames(relevant_genes2)
+
+deg_entrez2 <- bitr(relevant_genes2, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Mm.eg.db)
+deg_entrez2 <- deg_entrez2$ENTREZID
+
+# GO ENRICHMENT
+go_enrich2 <- enrichGO(
+  gene = deg_entrez2,
+  OrgDb = org.Mm.eg.db,
+  keyType = "ENTREZID", 
+  ont = "BP"
 )
 
-ggsave("~/R/Figures/Heatmap_sub-chronic.png", heatmap, dpi = 1080, height = 10, width = 7)
+go_terms2 <- go_enrich2@result[["Description"]]
+
+keywords <- c("neuro", "inflammation", "Wnt", "Rho", "regeneration", "remodelling", "SCI", "axonal", "axon","BMP", "spinal")
+
+terms_of_interest <- go_terms2[sapply(go_terms2, function(x) any(grepl(paste(keywords, collapse="|"), x, ignore.case = TRUE)))]
+
+terms_of_interest <- terms_of_interest[!grepl("muscle", terms_of_interest, ignore.case = TRUE)]
+
+go_enrich_df2 <- as.data.frame(go_enrich2@result)
+
+filtered_go_enrich_df2 <- go_enrich_df2 %>% filter(Description %in% terms_of_interest)
+
+filtered_go_enrich2 <- go_enrich2
+filtered_go_enrich2@result <- filtered_go_enrich_df2  
+
+go_enrich_barplot2 <- barplot(filtered_go_enrich2) + 
+  theme(axis.text.y = element_text(size = 9)) + 
+  ggtitle("GO ENRICHMENT ANALYSIS OF DEG - 1dpi") + labs(caption = "GO Terms Filtered by Spinal Cord Injury related Biological Process")
+
+go_enrich_barplot2
+
+ggsave("~/R/Figures/Enrichment_Analysis_Sub-Acute.png", go_enrich_barplot2, dpi = 1080, height = 7, width = 9)
 ```
 
-
-Venn-Diagramms
 
 ```{r}
 
-transcriptomic <- DEG %>% 
-  filter(abs(DEG$avg_log2FC) > 0.75)
-transcriptomic <- transcriptomic$Gene
+DEG2$baseline_exp <- 0
 
-proteomic <- proteins.ME %>%
-  filter(expr_Adjpval_Chronic_Ctrl == "up" | expr_Adjpval_Chronic_Ctrl == "down" )
-proteomic <- proteomic$Gene
+DEG_upregulated2 <- DEG2 %>%
+  arrange(desc(avg_log2FC)) %>% head(15)
 
-x = list("Differentially expressed genes" = transcriptomic, "Differential protein levels" = proteomic)
+DEG_downregulated2 <- DEG2 %>%
+  arrange(desc(avg_log2FC)) %>% tail(15)
 
-venn_diagram <- ggvenn(x, fill_color = c("salmon", "lightgreen"), show_elements = F, text_size = 4, set_name_size = 4)
-venn_diagram
+DEG_TOP2 <- bind_rows(DEG_downregulated2, DEG_upregulated2)
 
-ggsave("~/R/Figures/Venn_sub-chronic.png", venn_diagram, dpi = 1080, height = 7, width = 9)
-
-intersection <- intersect(proteomic, transcriptomic)
-paste(intersection,"is differentially expressed in both transcrit and protein levels when we compare uninjured and sub-chronic conditions")
 ```
 
-Correlation matrix
+HeatMap
 
 ```{r}
-transcriptomic <- DEG
-transcriptomic <- transcriptomic [, c("Gene", "avg_log2FC","p_val_adj")]
 
-proteomic <- proteins.ME
-proteomic <- proteomic [, c("Gene", "logFC_Chronic_Ctrl", "adj.P.Val_Chronic_Ctrl")]
+Idents(seurat_integrated_ME) <- "time"
 
-correlation_table <- merge(transcriptomic, proteomic, by = "Gene", all = T)
+DEG_astro2 <- FindMarkers(astro, ident.1 = "Sub-Acute", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST")
+DEG_astro2$Gene <- rownames(DEG_astro2)
+DEG_astro2$celltype <- "Astrocytes"
 
-colnames(correlation_table)[2] <- "log2FC_Transcriptomics"
-colnames(correlation_table)[3] <- "p_value_Transcriptomics"
-colnames(correlation_table)[4] <- "log2FC_Proteomics"
-colnames(correlation_table)[5] <- "p_value_Proteomics"
+DEG_neuron2 <- FindMarkers(neuron, ident.1 = "Sub-Acute", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST")
+DEG_neuron2$Gene <- rownames(DEG_neuron2)
+DEG_neuron2$celltype <- "Neurons"
 
-correlation_table$log2FC_Transcriptomics[is.na(correlation_table$log2FC_Transcriptomics)] <- 0
-correlation_table$p_value_Transcriptomics[is.na(correlation_table$p_value_Transcriptomics)] <- 1
+DEG_microglia2 <- FindMarkers(microglia, ident.1 = "Sub-Acute", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST")
+DEG_microglia2$Gene <- rownames(DEG_microglia2)
+DEG_microglia2$celltype <- "Microglia"
 
-correlation_table$log2FC_Proteomics <- as.numeric(correlation_table$log2FC_Proteomics)
-correlation_table$p_value_Proteomics <- as.numeric(correlation_table$p_value_Proteomics)
+DEG_opc2 <- FindMarkers(opc, ident.1 = "Sub-Acute", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST")
+DEG_opc2$Gene <- rownames(DEG_opc2)
+DEG_opc2$celltype <- "OPCs"
 
-correlation_table <- correlation_table %>% 
-  mutate(Tendence = case_when(
-    log2FC_Transcriptomics > 0.75 & log2FC_Proteomics > 0.75 ~ "Both upregulated",
-    log2FC_Transcriptomics < -0.75 & log2FC_Proteomics < -0.75 ~ "Both downregulated",
-    log2FC_Transcriptomics > 0.75 & log2FC_Proteomics < -0.75 ~ "Transcriptomics ↑, Proteomics ↓",
-    log2FC_Transcriptomics < -0.75 & log2FC_Proteomics > 0.75 ~ "Transcriptomics ↓, Proteomics ↑",
-    TRUE ~ "Neutral"
-  ))
+DEG_endothelial2 <- FindMarkers(endothelial, ident.1 = "Sub-Acute", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST")
+DEG_endothelial2$Gene <- rownames(DEG_endothelial2)
+DEG_endothelial2$celltype <- "Endothelial"
 
-correlation_table <- correlation_table %>% 
-  filter(p_value_Proteomics < 0.05 & p_value_Transcriptomics < 0.05)
+DEG_oligodendrocyte2 <- FindMarkers(oligodendrocyte, ident.1 = "Sub-Acute", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST")
+DEG_oligodendrocyte2$Gene <- rownames(DEG_oligodendrocyte2)
+DEG_oligodendrocyte2$celltype <- "Oligodendrocytes"
 
-correlation <- ggplot(correlation_table, aes(x = log2FC_Transcriptomics, y = log2FC_Proteomics, label = Gene)) +
-  geom_point(aes(color = Tendence), size = 3, alpha = 0.7) +
-  geom_text_repel(aes(color = Tendence), size = 3) + 
-  geom_smooth(method = "lm", color = "red", se = FALSE) +  
-  theme_minimal() +
-  labs(title = "Relationship between Gene Expression and Protein Levels",
-       x = "log2FC Transcriptomics",
-       y = "log2FC Proteomics") +
-  scale_color_manual(values = c(
-    "Both upregulated" = "green",
-    "Both downregulated" = "red",
-    "Transcriptomics ↑, Proteomics ↓" = "grey40",
-    "Transcriptomics ↓, Proteomics ↑" = "grey20",
-    "Neutral" = "grey80"
-  )) +
-  theme(legend.position = "bottom")
-correlation
-ggplotly(correlation)
+combined_results2 <- bind_rows(DEG_astro2, DEG_neuron2, DEG_microglia2, DEG_opc2, DEG_oligodendrocyte2, DEG_endothelial2)
 
-ggsave("~/R/Figures/Correlation_sub-chronic.png", correlation, dpi = 1080, height = 7, width = 9)
+genes_up <- DEG_upregulated2$Gene
+genes_down <- DEG_downregulated2$Gene
+
+combined_results2 <- combined_results2 %>%
+  filter(Gene %in% genes_down | Gene %in% genes_up)
+
+heatmap_data2 <- combined_results2 %>%
+  select(Gene, celltype, avg_log2FC) %>%
+  pivot_wider(names_from = celltype, values_from = avg_log2FC) %>%
+  column_to_rownames("Gene") %>%
+  as.matrix()
+
+heatmap_data2[is.na(heatmap_data2)] <- 0
+
+order <- c("Endothelial","Microglia", "OPCs", "Astrocytes", "Neurons", "Oligodendrocytes")
+
+heatmap_data2 <- heatmap_data2 [, order ]
+
+library(ComplexHeatmap)
+heatmap2 <- Heatmap(
+  heatmap_data2,
+  col = circlize::colorRamp2(c(-7, 0, 7), c("blue", "white", "red")),
+  row_names_gp = gpar(fontsize = 8),
+  column_names_gp = gpar(fontsize = 8),
+  name = "log2FC", row_title = "Genes", row_title_side = "right", column_title = "Cell types", column_title_side = "bottom", use_raster = T, raster_quality = 5, raster_device = "png"
+)
+
+heatmap2
+
+
 ```
-
 
 
 
