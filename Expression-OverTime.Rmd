@@ -18,6 +18,8 @@ library(ggrepel)
 library(stringr)
 library(purrr)
 library(venn)
+library(ComplexHeatmap)
+library(circlize)
 
 # Data of DEGs
 times <- c("Acute (7 dpi)", "Sub-Chronic (4-6 wpi)", "Sub-Acute (21 dpi)", "First-Day (1 dpi)")
@@ -84,7 +86,7 @@ intersections_down
 # CHANGE OF THE EXPRESSION OVER TIME
 
 results <- results %>%
-  filter(p_val_adj_Acute < 0.05 & p_val_adj_SubChronic < 0.05 & p_val_adj_SubAcute < 0.05 & p_val_adj_FirstDay < 0.05)
+  filter(p_val_adj_Acute < 0.05 & p_val_adj_SubChronic < 0.05 & p_val_adj_SubAcute < 0.05 & p_val_adj_FirstDay  < 0.05)
 
 proteins <- read_excel("~/R/Data/MAIN_ECM_Proteome.xlsx")
 proteins <- proteins [, c("Gene", "Matrisome.Category")]
@@ -93,7 +95,7 @@ results <-  merge(results, proteins, by = "Gene")
 results$`Before-Injury` <- 0 
 
 results <-  results %>% 
-  filter(`First-Day (1 dpi)` > 0.25 & `Acute (7 dpi)` > 0.25 & `Sub-Acute (21 dpi)` > 0.25 & `Sub-Chronic (4-6 wpi)` > 0.25 | `First-Day (1 dpi)` < -0.25 & `Acute (7 dpi)` < -0.25 & `Sub-Acute (21 dpi)` < -0.25 & `Sub-Chronic (4-6 wpi)` < -0.25 )
+  filter(`Acute (7 dpi)` > 0.7 & `Sub-Chronic (4-6 wpi)` > 0.15 | `Acute (7 dpi)` < -0.7 & `Sub-Chronic (4-6 wpi)` < -0.15)
 
 results_long <- results %>%
   pivot_longer(cols = c(`Before-Injury`,`First-Day (1 dpi)`, `Acute (7 dpi)`,`Sub-Acute (21 dpi)`, `Sub-Chronic (4-6 wpi)`), names_to = "TimePoint", values_to = "log2FC") %>% mutate(TimePoint = factor(TimePoint, levels = c("Before-Injury", "First-Day (1 dpi)", "Acute (7 dpi)", "Sub-Acute (21 dpi)", "Sub-Chronic (4-6 wpi)")))
@@ -107,8 +109,26 @@ timevariation
 
 ggsave("~/R/Figures/Layout.png",timevariation, dpi = 1080, width = 14, height = 7)
 
+results_long <- results_long %>%
+  filter(TimePoint != "Before-Injury")
 
+heatmap_mat <- results_long %>%
+  select(Gene, TimePoint, log2FC) %>%
+  pivot_wider(names_from = TimePoint, values_from = log2FC) %>%
+  column_to_rownames("Gene") %>%
+  as.matrix()
 
+heatmap_time <- Heatmap(
+  heatmap_mat,
+  name = "log2FC",
+  cluster_rows = TRUE,
+  cluster_columns = TRUE,
+  show_row_names = TRUE,
+  show_column_names = TRUE,
+  row_names_gp = gpar(fontsize = 8),
+  column_names_gp = gpar(fontsize = 10),
+  col = circlize::colorRamp2(c(-4, 0, 4), c("blue", "white", "red"))
+)
 ```
 
 

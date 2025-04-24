@@ -25,21 +25,29 @@ library(dplyr)
 transcriptomic <- read_excel("~/R/Data/DEG_Acute.xlsx")
 proteomic <- read_excel("~/R/Data/MAIN_ECM_Proteome.xlsx")
 
-transcriptomic <- transcriptomic %>% filter(abs(transcriptomic$avg_log2FC) > 0.75)
-transcriptomic <- transcriptomic$Gene
+transcriptomic_up <- transcriptomic %>% filter(transcriptomic$avg_log2FC > 0.5 & p_val_adj < 0.05)
+transcriptomic_up <- transcriptomic_up$Gene
+transcriptomic_down <- transcriptomic %>% filter(transcriptomic$avg_log2FC < -0.5 & p_val_adj < 0.05)
+transcriptomic_down <- transcriptomic_down$Gene
 
-proteomic <- proteomic %>% filter(expr_Adjpval_Acute_Ctrl == "up" | expr_Adjpval_Acute_Ctrl == "down" )
-proteomic <- proteomic$Gene
+proteomic_up <- proteomic %>% filter(expr_Adjpval_Acute_Ctrl == "up" & as.numeric(logFC_Acute_Ctrl) > 0.5)
+proteomic_up <- proteomic_up$Gene
+proteomic_down <- proteomic %>% filter(expr_Adjpval_Acute_Ctrl == "down" & as.numeric(logFC_Acute_Ctrl) < -0.5)
+proteomic_down <- proteomic_down$Gene
 
-x = list("Differentially expressed genes" = transcriptomic,"Differential protein levels" = proteomic)
+x = list("Genes upregulated" = transcriptomic_up, "Proteins upregulated" = proteomic_up)
+y =  list("Genes downregulated" = transcriptomic_down, "Proteins downregulated" = proteomic_down)
+venn_up <- ggvenn(x, fill_color = c("salmon", "lightgreen"), show_elements = F, text_size = 5, set_name_size = 5)
+venn_down <- ggvenn(y, fill_color = c("salmon", "lightgreen"), show_elements = F, text_size = 5, set_name_size = 5)
 
-venn_diagram <- ggvenn(x, fill_color = c("salmon", "lightgreen"), show_elements = F, text_size = 5, set_name_size = 5)
-venn_diagram
+ggsave("~/R/Figures/Proteomic_Venn_Acute_Up (7 dpi).png", venn_up, dpi = 1080, height = 7, width = 9)
+ggsave("~/R/Figures/Proteomic_Venn_Acute_Down (7 dpi).png", venn_down, dpi = 1080, height = 7, width = 9)
 
-ggsave("~/R/Figures/Proteomic_Venn_Acute (7 dpi).png", venn_diagram, dpi = 1080, height = 7, width = 9)
+intersection_up <- intersect(proteomic_up, transcriptomic_up)
+paste(intersection_up,"are upregulated at transcriptomic and proteomic level")
 
-intersection <- intersect(proteomic, transcriptomic)
-paste(intersection,"is differentially expressed in both transcrit and protein levels when we compare uninjured and sub-chronic conditions")
+intersection_down <- intersect(proteomic_down, transcriptomic_down)
+paste(intersection_down,"are downregulated at transcriptomic and proteomic level")
 ```
 
 
@@ -75,10 +83,10 @@ correlation_table <- correlation_table %>%
   ))
 
 # P-value Proteomics 0.05
-correlation_table <- correlation_table %>% 
+correlation_table1 <- correlation_table %>% 
   filter(p_value_Proteomics <= 1 & p_value_Transcriptomics < 0.05)
 
-correlation <- ggplot(correlation_table, aes(x = log2FC_Transcriptomics, y = log2FC_Proteomics, label = Gene)) +
+correlation <- ggplot(correlation_table1, aes(x = log2FC_Transcriptomics, y = log2FC_Proteomics, label = Gene)) +
   geom_point(aes(color = Tendence), size = 3, alpha = 0.7) +  
   geom_text_repel(aes(color = Tendence), size = 3) +  
   geom_smooth(method = "lm", color = "red", se = FALSE) +  
@@ -102,30 +110,38 @@ ggsave("~/R/Figures/Proteomic_Correlation_Acute (7 dpi).png", correlation, dpi =
 *SUB-CHRONIC CONDITION (4-6 wpi)*
 
 ```{r}
-# VENN DIAGRAMS 
-transcriptomic <- read_excel("~/R/Data/DEG_Acute.xlsx")
+transcriptomic <- read_excel("~/R/Data/DEG_Sub-Chronic.xlsx")
 proteomic <- read_excel("~/R/Data/MAIN_ECM_Proteome.xlsx")
 
-transcriptomic <- transcriptomic %>% filter(abs(transcriptomic$avg_log2FC) > 0.75)
-transcriptomic <- transcriptomic$Gene
+# VENN DIAGRAMS 
+transcriptomic_up <- transcriptomic %>% filter(transcriptomic$avg_log2FC > 0.5 & p_val_adj < 0.05)
+transcriptomic_up <- transcriptomic_up$Gene
+transcriptomic_down <- transcriptomic %>% filter(transcriptomic$avg_log2FC < -0.5 & p_val_adj < 0.05)
+transcriptomic_down <- transcriptomic_down$Gene
 
-proteomic <- proteomic %>% filter(expr_Adjpval_Chronic_Ctrl == "up" | expr_Adjpval_Chronic_Ctrl == "down" )
-proteomic <- proteomic$Gene
+proteomic_up <- proteomic %>% filter(expr_Adjpval_Chronic_Ctrl == "up" & as.numeric(logFC_Chronic_Ctrl) > 0.5)
+proteomic_up <- proteomic_up$Gene
+proteomic_down <- proteomic %>% filter(expr_Adjpval_Chronic_Ctrl == "down" & as.numeric(logFC_Chronic_Ctrl) < -0.5)
+proteomic_down <- proteomic_down$Gene
 
-x = list("Differentially expressed genes" = transcriptomic, "Differential protein levels" = proteomic)
+x = list("Genes upregulated" = transcriptomic_up, "Proteins upregulated" = proteomic_up)
+y =  list("Genes downregulated" = transcriptomic_down, "Proteins downregulated" = proteomic_down)
+venn_up <- ggvenn(x, fill_color = c("salmon", "lightgreen"), show_elements = F, text_size = 5, set_name_size = 5)
+venn_down <- ggvenn(y, fill_color = c("salmon", "lightgreen"), show_elements = F, text_size = 5, set_name_size = 5)
 
-venn_diagram <- ggvenn(x, fill_color = c("salmon", "lightgreen"), show_elements = F, text_size = 4, set_name_size = 4)
-venn_diagram
+ggsave("~/R/Figures/Proteomic_Venn_Sub-Chronic_Up (4-6 wpi).png", venn_up, dpi = 1080, height = 7, width = 9)
+ggsave("~/R/Figures/Proteomic_Venn_Sub-Chronic_Down (4-6 wpi).png", venn_down, dpi = 1080, height = 7, width = 9)
 
-ggsave("~/R/Figures/Proteomic_Venn_Sub-Chronic (4-6 wpi).png", venn_diagram, dpi = 1080, height = 7, width = 9)
+intersection_up <- intersect(proteomic_up, transcriptomic_up)
+paste(intersection_up,"are upregulated at transcriptomic and proteomic level")
 
-intersection <- intersect(proteomic, transcriptomic)
-paste(intersection,"is differentially expressed in both transcrit and protein levels when we compare uninjured and sub-chronic conditions")
+intersection_down <- intersect(proteomic_down, transcriptomic_down)
+paste(intersection_down,"are downregulated at transcriptomic and proteomic level")
 
 ```
 
 ```{r}
-transcriptomic <- read_excel("~/R/Data/DEG_Acute.xlsx")
+transcriptomic <- read_excel("~/R/Data/DEG_Sub-Chronic.xlsx")
 proteomic <- read_excel("~/R/Data/MAIN_ECM_Proteome.xlsx")
 
 # CORRELATION
@@ -135,7 +151,7 @@ proteomic <- proteomic [, c("Gene", "logFC_Chronic_Ctrl", "adj.P.Val_Chronic_Ctr
 
 correlation_table <- merge(transcriptomic, proteomic, by = "Gene", all = T)
 
-colnames(correlation_table)[2] <- "log2FC_Transcriptomics"
+colnames(correlation_table)[2] <- "log2FC_Transcriptomicsc"
 colnames(correlation_table)[3] <- "p_value_Transcriptomics"
 colnames(correlation_table)[4] <- "log2FC_Proteomics"
 colnames(correlation_table)[5] <- "p_value_Proteomics"
@@ -156,10 +172,10 @@ correlation_table <- correlation_table %>%
   ))
 
 # P-value Proteomics 0.05
-correlation_table <- correlation_table %>% 
+correlation_table2 <- correlation_table %>% 
   filter(p_value_Proteomics <= 1 & p_value_Transcriptomics < 0.05)
 
-correlation <- ggplot(correlation_table, aes(x = log2FC_Transcriptomics, y = log2FC_Proteomics, label = Gene)) +
+correlation <- ggplot(correlation_table2, aes(x = log2FC_Transcriptomics, y = log2FC_Proteomics, label = Gene)) +
   geom_point(aes(color = Tendence), size = 3, alpha = 0.7) +
   geom_text_repel(aes(color = Tendence), size = 3) + 
   geom_smooth(method = "lm", color = "red", se = FALSE) +  
@@ -178,5 +194,74 @@ correlation <- ggplot(correlation_table, aes(x = log2FC_Transcriptomics, y = log
 correlation
 ggplotly(correlation)
 ggsave("~/R/Figures/Proteomic_Correlation_Sub-Chronic (4-6 wpi).png", correlation, dpi = 1080, height = 7, width = 9)
+```
+
+```{r}
+genes_interest <- c("Hapln2", "Tinagl1", "Spock3", "Lgals3", "Thbs2", "Serpinb1a", "Serpina3n", "Anxa3", "Tnc", "C1qa", "Ctsz", "Tgfb1", "Postn", "Serpind1", "Ptn", "Mmp14", "Vwa1", "Itih3", "Vit", "Lgi1", "S100a6","Emilin1", "Tgm2")
+
+# Acute
+correlation_table1 <- correlation_table1 %>% 
+  filter(Gene %in% genes_interest & p_value_Transcriptomics < 0.05)
+
+prefix <- "Acute_"
+
+colnames(correlation_table1) <- sapply(colnames(correlation_table1), function(x) ifelse(x != "Gene", paste0(prefix, x), x))
+
+# Sub-Chronic
+correlation_table2 <- correlation_table2 %>% 
+  filter(Gene %in% genes_interest & p_value_Transcriptomics < 0.05)
+
+prefix <- "SubChronic_"
+
+colnames(correlation_table2) <- sapply(colnames(correlation_table2), function(x) ifelse(x != "Gene", paste0(prefix, x), x))
+
+# Merge and Data tidy
+correlation_table <- merge(correlation_table1, correlation_table2, by = "Gene")
+
+correlation_table <- correlation_table %>% 
+  select(matches("Gene|^Acute|^Sub"))
+
+correlation_table <- correlation_table %>% 
+  select(matches("Gene|Transcriptomics$|Proteomics$"))
+
+delete_cols <- grep("^\\w+_p_value_\\w+$", colnames(correlation_table), value = TRUE)
+
+correlation_table <- correlation_table[, !colnames(correlation_table) %in% delete_cols]
+
+# Prepare for ggpplot
+long_data <- correlation_table %>%
+  pivot_longer(cols = -Gene, 
+               names_to = c("Condition", "Type"), 
+               names_pattern = "(.*)_(.*)",
+               values_to = "log2FC")
+long_data$Condition <- gsub("_log2FC", "", long_data$Condition)
+
+uninjured_data <- expand.grid(
+  Gene = unique(long_data$Gene),
+  Condition = "Uninjured",
+  Type = unique(long_data$Type),
+  log2FC = 0
+)
+long_data <- bind_rows(long_data, uninjured_data) %>%
+  mutate(Condition = factor(Condition, levels = c("Uninjured", "Acute", "SubChronic")))
+
+layout_proteomica <- ggplot(long_data, aes(x = Condition, y = log2FC, color = Type, group = Type)) +
+  geom_line() +
+  geom_point() + 
+  facet_wrap(~ Gene, scales = "free_y") +
+  labs(
+    title = "Proteomics vs Transcriptomics Comparison",
+    x = "Condition", 
+    y = "log2 Fold Change",
+    color = "Data Type"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1),
+    legend.position = "top"
+  )
+
+ggsave("~/R/Figures/Layout Proteomics-Transcriptomics.png", layout_proteomica, dpi = 1080, height = 7, width = 9)
+
 ```
 

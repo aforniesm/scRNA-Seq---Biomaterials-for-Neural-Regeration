@@ -65,7 +65,7 @@ metadata2$dataset <- "Matson_2022"
 ```
 
 ```{r}
-seurat2 <- CreateSeuratObject(counts2, assay = "RNA", project = "Matson_2022 (Single cell Atlas)", meta.data = metadata2, min.cells= 50, min.features = 100)
+seurat2 <- CreateSeuratObject(counts2, assay = "RNA", project = "Matson_2022 (Single cell Atlas)", meta.data = metadata2, min.cells= 10, min.features = 100)
 
 remove_features2 <- nrow(matrix2) - nrow(seurat2)
 remove_cells2 <- ncol(matrix2) - ncol(seurat2)
@@ -103,7 +103,7 @@ metadata4$dataset <- "Squair_2021"
 ```
 
 ```{r}
-seurat4 <- CreateSeuratObject(matrix4, assay = "RNA", project = "Squair_2021",  meta.data = metadata4, min.cells = 50, min.features = 100)
+seurat4 <- CreateSeuratObject(matrix4, assay = "RNA", project = "Squair_2021",  meta.data = metadata4, min.cells = 10, min.features = 100)
 
 remove_features4 <- nrow(matrix4) - nrow(seurat4)
 remove_cells4 <- ncol(matrix4) - ncol(seurat4)
@@ -145,7 +145,7 @@ metadata5$dataset <- "Kathe_2022"
 
 
 ```{r}
-seurat5 <- CreateSeuratObject(matrix5, assay = "RNA", project = "Kathe_2022",  meta.data = metadata5, min.cells = 50, min.features = 100)
+seurat5 <- CreateSeuratObject(matrix5, assay = "RNA", project = "Kathe_2022",  meta.data = metadata5, min.cells = 10, min.features = 100)
 
 remove_features5 <- nrow(matrix5) - nrow(seurat5)
 remove_cells5 <- ncol(matrix5) - ncol(seurat5)
@@ -230,7 +230,7 @@ features <- SelectIntegrationFeatures(
 
 seurat_list <- lapply(X = seurat_list, FUN = function(x) {x <- ScaleData(x, features =  features) 
 x <- RunPCA(x, features = features, npcs = 30)
-x <- RunUMAP(x, dims = 1:20, parallel = T, BBPARAM = SnowParam(workers = 8))})
+x <- RunUMAP(x, dims = 1:20)})
 
 ```
 
@@ -251,6 +251,7 @@ umap5 <- DimPlot(seurat5_norm, split.by = "dataset", group.by = "celltype", labe
 umap2 + umap4 + umap5
 
 ggsave("~/R/Figures/UMAP_BeforeIntegration_Sub-Chronic.png", umap2 + umap4 + umap5, dpi = 1080, height = 12, width = 8)
+
 ```
 
 6. Integrate the three datasets
@@ -258,17 +259,16 @@ ggsave("~/R/Figures/UMAP_BeforeIntegration_Sub-Chronic.png", umap2 + umap4 + uma
 ```{r}
 rm(seurat2_norm, seurat4_norm, seurat5_norm)
 
-genes_of_interest <- c(
-  "A2m", "Anxa3", "Anxa4", "C1qa", "C1qb", "C1qc",
-  "Ccl6", "Col16a1", "Ctsb", "Ctsz", "Cxcl12",
-  "Fbn1", "Fn1", "Hapln2", "Itih3", "Lgals3",
-  "Lgi1", "S100a6", "Serpina3n", "Serpinb1a",
-  "Serpind1", "Spock3", "Spp1", "Tgfb1", "Thbs1",
-  "Thbs2", "Tnr", "Vwa1", "Vwf")
+ecm <- read_excel("~/R/Data/MAIN_ECM_Proteome.xlsx")
+genes_of_interest <- ecm$Gene
 
 features <- c(features, genes_of_interest)
 
 features <- unique(features)
+
+features <- intersect(features, rownames(seurat_list[[1]]))
+features <- intersect(features, rownames(seurat_list[[2]])) 
+features <- intersect(features, rownames(seurat_list[[3]]))
 
 rm(seurat4_norm, anchors)
 
@@ -276,13 +276,13 @@ anchors_integration <- FindIntegrationAnchors(object.list = seurat_list, dims = 
 
 gc()
 
-seurat_integrated <- IntegrateData(anchorset = anchors_integration, dims = 1:30, verbose = TRUE, normalization.method = "LogNormalize")
+seurat_integrated <- IntegrateData(anchorset = anchors_integration, dims = 1:20, verbose = TRUE, normalization.method = "LogNormalize")
 
 rm(seurat_list, anchors_integration)
 
 gc()
 
-save.image(file = "~/R/Downloads/Sub-Chronic_Data.RData")
+save.image(file = "~/R/Downloads/Sub-Chronic_Data_CCA.RData")
 ```
 
 * Correct metadata issues
@@ -353,7 +353,7 @@ ggsave("~/R/Figures/UMAP_PostIntegration_Sub-Chronic.png", umap, dpi = 1080, hei
 celltype <- DimPlot(seurat_integrated, group.by = "celltype") + ggtitle("Celltypes")
 celltype
 
-dataset <- DimPlot(seurat_integrated, group.by = "dataset") + ggtitle("Celltypes")
+dataset <- DimPlot(seurat_integrated, group.by = "dataset") + ggtitle("Datasets")
 dataset
 
 ggsave("~/R/Figures/Cells_Sub-Chronic.png", celltype, dpi = 1080, height = 7, width = 10)
@@ -469,7 +469,7 @@ FindMarkers analysis
 ```{r}
 Idents(seurat_integrated_ME) <- "time"
 
-DEG <- FindMarkers(seurat_integrated_ME,  ident.1 = "Sub-Chronic", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", assay = "integrated", layer = "data")
+DEG <- FindMarkers(seurat_integrated_ME,  ident.1 = "Sub-Chronic", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.02, test.use = "MAST", assay = "integrated", layer = "data")
 
 DEG$Gene <- rownames(DEG)
 
@@ -479,7 +479,7 @@ ggsave("~/R/Figures/Volcano_Sub-Chronic.png", volcanoplot, dpi = 1080, height = 
 
 write.xlsx(DEG, "~/R/Data/DEG_Sub-Chronic.xlsx")
 
-DEG2 <- FindMarkers(seurat_integrated_ME,  ident.1 = "Sub-Acute", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", assay = "integrated", layer = "data")
+DEG2 <- FindMarkers(seurat_integrated_ME,  ident.1 = "Sub-Acute", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.02, test.use = "MAST", assay = "integrated", layer = "data")
 
 DEG2$Gene <- rownames(DEG2)
 
@@ -540,7 +540,7 @@ Enrichment analysis
 
 ```{r}
 
-relevant_genes <- subset(DEG, p_val_adj < 0.05 & abs(avg_log2FC) > 0.75)
+relevant_genes <- subset(DEG, p_val_adj < 0.05 & abs(avg_log2FC) > 0.5)
 
 relevant_genes <- rownames(relevant_genes)
 
@@ -552,7 +552,8 @@ go_enrich <- enrichGO(
   gene = deg_entrez,
   OrgDb = org.Mm.eg.db,
   keyType = "ENTREZID", 
-  ont = "BP", qvalueCutoff =  0.1)
+  ont = "BP", qvalueCutoff =  0.1,
+  pAdjustMethod = "fdr")
 
 go_terms <- go_enrich@result[["Description"]]
 
@@ -577,10 +578,10 @@ ggsave("~/R/Figures/Enrichment_Analysis_Sub-Chronic.png", go_enrich_barplot, dpi
 DEG$baseline_exp <- 0
 
 DEG_upregulated <- DEG %>%
-  arrange(desc(avg_log2FC)) %>% head(10)
+  arrange(desc(avg_log2FC)) %>% head(15)
 
 DEG_downregulated <- DEG %>%
-  arrange(desc(avg_log2FC)) %>% tail(10)
+  arrange(desc(avg_log2FC)) %>% tail(15)
 
 DEG_TOP <- bind_rows(DEG_downregulated, DEG_upregulated)
 
@@ -621,8 +622,8 @@ DEG_micro <- FindMarkers(micro,  ident.1 = "Sub-Chronic", ident.2 = "Uninjured",
 DEG_micro$Gene <- rownames(DEG_micro)
 DEG_micro$celltype <- "Microglia"
 
-neurons <- subset(seurat_integrated_ME, subset = celltype == "Neurons")
-DEG_neurons <- FindMarkers(neurons,  ident.1 = "Sub-Chronic", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST")
+neuron <- subset(seurat_integrated_ME, subset = celltype == "Neurons")
+DEG_neurons <- FindMarkers(neuron,  ident.1 = "Sub-Chronic", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST")
 DEG_neurons$Gene <- rownames(DEG_neurons)
 DEG_neurons$celltype <- "Neurons"
 
@@ -637,8 +638,17 @@ combined_results <- bind_rows(
 genes_up <- DEG_upregulated$Gene
 genes_down <- DEG_downregulated$Gene
 
+datasets <- list(DEG_astro, DEG_neurons, DEG_micro, DEG_OPCs, DEG_oligo, DEG_endo)
+
+top_gene_names <- unlist(lapply(datasets, function(df) {
+  df_sorted <- df[order(df$avg_log2FC, decreasing = TRUE), ]
+  top2_up_genes <- head(df_sorted$Gene, 2)
+  top2_down_genes <- tail(df_sorted$Gene, 2)
+  c(top2_up_genes, top2_down_genes)
+}))
+
 combined_results <- combined_results %>%
-  filter(Gene %in% genes_down | Gene %in% genes_up)
+  filter(Gene %in% genes_down | Gene %in% genes_up | Gene %in% top_gene_names)
 
 heatmap_data <- combined_results %>%
   select(Gene, celltype, avg_log2FC) %>%
@@ -657,6 +667,7 @@ heatmap <- Heatmap(
   name = "log2FC", row_title = "Genes", row_title_side = "right", column_title = "Cell types", column_title_side = "bottom"
 )
 heatmap
+
 ```
 
 For Sub-Acute
@@ -665,7 +676,7 @@ Enrichment analysis
 
 ```{r}
 
-relevant_genes2 <- subset(DEG2, p_val_adj < 0.05 & abs(avg_log2FC) > 0.75)
+relevant_genes2 <- subset(DEG2, p_val_adj < 0.05 & abs(avg_log2FC) > 0.5)
 
 relevant_genes2 <- rownames(relevant_genes2)
 
@@ -677,8 +688,8 @@ go_enrich2 <- enrichGO(
   gene = deg_entrez2,
   OrgDb = org.Mm.eg.db,
   keyType = "ENTREZID", 
-  ont = "BP"
-)
+  ont = "BP", qvalueCutoff =  0.1,
+  pAdjustMethod = "fdr")
 
 go_terms2 <- go_enrich2@result[["Description"]]
 
@@ -733,29 +744,38 @@ DEG_neuron2 <- FindMarkers(neuron, ident.1 = "Sub-Acute", ident.2 = "Uninjured",
 DEG_neuron2$Gene <- rownames(DEG_neuron2)
 DEG_neuron2$celltype <- "Neurons"
 
-DEG_microglia2 <- FindMarkers(microglia, ident.1 = "Sub-Acute", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST")
+DEG_microglia2 <- FindMarkers(micro, ident.1 = "Sub-Acute", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST")
 DEG_microglia2$Gene <- rownames(DEG_microglia2)
 DEG_microglia2$celltype <- "Microglia"
 
-DEG_opc2 <- FindMarkers(opc, ident.1 = "Sub-Acute", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST")
+DEG_opc2 <- FindMarkers(OPCs, ident.1 = "Sub-Acute", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST")
 DEG_opc2$Gene <- rownames(DEG_opc2)
 DEG_opc2$celltype <- "OPCs"
 
-DEG_endothelial2 <- FindMarkers(endothelial, ident.1 = "Sub-Acute", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST")
+DEG_endothelial2 <- FindMarkers(endo, ident.1 = "Sub-Acute", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST")
 DEG_endothelial2$Gene <- rownames(DEG_endothelial2)
 DEG_endothelial2$celltype <- "Endothelial"
 
-DEG_oligodendrocyte2 <- FindMarkers(oligodendrocyte, ident.1 = "Sub-Acute", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST")
+DEG_oligodendrocyte2 <- FindMarkers(oligo, ident.1 = "Sub-Acute", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST")
 DEG_oligodendrocyte2$Gene <- rownames(DEG_oligodendrocyte2)
 DEG_oligodendrocyte2$celltype <- "Oligodendrocytes"
 
 combined_results2 <- bind_rows(DEG_astro2, DEG_neuron2, DEG_microglia2, DEG_opc2, DEG_oligodendrocyte2, DEG_endothelial2)
 
+datasets <- list(DEG_astro2, DEG_neuron2, DEG_microglia2, DEG_opc2, DEG_oligodendrocyte2, DEG_endothelial2)
+
+top_gene_names2 <- unlist(lapply(datasets, function(df) {
+  df_sorted <- df[order(df$avg_log2FC, decreasing = TRUE), ]
+  top2_up_genes <- head(df_sorted$Gene, 2)
+  top2_down_genes <- tail(df_sorted$Gene, 2)
+  c(top2_up_genes, top2_down_genes)
+}))
+
 genes_up <- DEG_upregulated2$Gene
 genes_down <- DEG_downregulated2$Gene
 
 combined_results2 <- combined_results2 %>%
-  filter(Gene %in% genes_down | Gene %in% genes_up)
+  filter(Gene %in% genes_down | Gene %in% genes_up | Gene %in% top_gene_names2)
 
 heatmap_data2 <- combined_results2 %>%
   select(Gene, celltype, avg_log2FC) %>%

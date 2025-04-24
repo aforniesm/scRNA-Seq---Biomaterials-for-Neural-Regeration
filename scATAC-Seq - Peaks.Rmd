@@ -1,0 +1,233 @@
+---
+title: "scATAC-Seq"
+output: html_document
+date: "2025-04-15"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F)
+```
+
+```{r}
+library(Seurat)
+library(dplyr)
+library(GenomicRanges)
+library(ggplot2)
+library(Signac)
+library(Matrix)
+library(EnsDb.Hsapiens.v75)
+library(readxl)
+library(tidyverse)
+```
+
+```{r}
+peaks <- readMM("~/R/Data/ATAC-Seq/scATAC_peak.mtx")
+metadata_peaks <- read.delim("~/R/Data/ATAC-Seq/metadata_ATAC_peak.txt", header = T)
+features_peaks <- read.delim("~/R/Data/ATAC-Seq/Peak_features.txt.gz", header = F)
+barcodes_peaks <- read.delim("~/R/Data/ATAC-Seq/Peak_barcodes.txt.gz", header = F) 
+
+```
+
+```{r}
+
+rownames(peaks) <- features_peaks$V1
+colnames(peaks) <- barcodes_peaks$V1
+rownames(metadata_peaks) <- metadata_peaks$barcode
+rownames(peaks) <- gsub("_", ":", rownames(peaks))
+rownames(peaks) <- sub(":(\\d+):", ":\\1-", rownames(peaks))
+```
+
+```{r}
+rownames(peaks) <- gsub("_", ":", rownames(peaks))
+rownames(peaks) <- sub(":(\\d+):", ":\\1-", rownames(peaks))
+
+chrom_assay <- CreateChromatinAssay(
+  counts = peaks,
+  sep = c(":", "-"),
+  min.cells = 10,
+  min.features = 100)
+
+seurat <- CreateSeuratObject(
+  counts = chrom_assay,
+  assay = "ATAC",
+  meta.data = metadata_peaks)
+```
+
+```{r}
+# Extract gene annotation
+annotations <- GetGRangesFromEnsDb(ensdb = EnsDb.Hsapiens.v75)
+seqlevels(annotations) <- paste0("chr", seqlevels(annotations))
+Annotation(seurat) <- annotations
+```
+
+QC
+
+```{r}
+# Visualizing QC
+colnames(seurat@meta.data)
+VlnPlot(seurat, features = "nCount_ATAC")
+
+# Filter
+seurat <- subset(x = seurat, subset = nCount_ATAC > 9000 & nCount_ATAC < 100000)
+```
+
+Norm
+
+```{r}
+seurat <- RunTFIDF(seurat)
+seurat <- FindTopFeatures(seurat, min.cutoff = "q0")
+seurat <- RunSVD(seurat)
+
+# 1 COMPONENT RELATED WITH SEQ DEPTH
+DepthCor(seurat)
+
+seurat <- RunUMAP(seurat, reduction = 'lsi', dims = 2:30)
+
+Idents(seurat) <- "layer1"
+DimPlot(seurat, label = T)
+
+```
+
+```{r}
+# Create gene activity matrix
+Idents(seurat) <- "label"
+atac <- Seurat::FindMarkers(seurat, ident.1 = "7d", ident.2 = "Uninjured", min.pct = 0.05, layer = "data")
+```
+
+```{r}
+# Genes close to the regions
+open_sci <- rownames(atac[atac$avg_log2FC > 1, ])
+close_sci <- rownames(atac[atac$avg_log2FC < -1, ])
+
+closest_genes_open <- ClosestFeature(seurat, regions = open_sci)
+closest_genes_close <- ClosestFeature(seurat, regions = close_sci)
+
+ecm <- read_excel("~/R/Data/MAIN_ECM_Proteome.xlsx")
+ecm$Gene <- toupper(ecm$Gene)
+ecm_genes <- ecm$Gene
+
+# Filter by ECM genes
+closest_genes_close <- closest_genes_close %>%
+  dplyr::filter(gene_name %in% ecm_genes)
+closest_genes_close <- closest_genes_close %>%
+  dplyr::filter(distance == 0)
+
+closest_genes_open <- closest_genes_open %>%
+  dplyr::filter(gene_name %in% ecm_genes)
+closest_genes_open <- closest_genes_open %>%
+  dplyr::filter(distance == 0)
+
+```
+
+Same for 2m
+
+```{r}
+# Create gene activity matrix
+Idents(seurat) <- "label"
+atac2 <- Seurat::FindMarkers(seurat, ident.1 = "2m", ident.2 = "Uninjured", min.pct = 0.05, layer = "data")
+```
+
+```{r}
+# Genes close to the regions
+open_sci2 <- rownames(atac2[atac2$avg_log2FC > 1, ])
+close_sci2 <- rownames(atac2[atac2$avg_log2FC < -1, ])
+
+closest_genes_open2 <- ClosestFeature(seurat, regions = open_sci2)
+closest_genes_close2 <- ClosestFeature(seurat, regions = close_sci2)
+
+# Filter by ECM genes
+closest_genes_close2 <- closest_genes_close2 %>%
+  dplyr::filter(gene_name %in% ecm_genes)
+closest_genes_close2 <- closest_genes_close2 %>%
+  dplyr::filter(distance == 0)
+
+closest_genes_open2 <- closest_genes_open2 %>%
+  dplyr::filter(gene_name %in% ecm_genes)
+closest_genes_open2 <- closest_genes_open2 %>%
+  dplyr::filter(distance == 0)
+
+```
+
+OMIC INTEGRATION
+
+```{r}
+# Acute
+DEG <- read_excel("~/R/Data/DEG_Acute.xlsx")
+DEG <- DEG %>%
+  dplyr::filter(p_val_adj < 0.05)
+DEG$Gene <- toupper(DEG$Gene)
+
+DEG_df_open <- merge(DEG, closest_genes_open[, c("gene_name", "query_region")], by.x = "Gene", by.y = "gene_name")
+DEG_df_close <- merge(DEG, closest_genes_close[, c("gene_name", "query_region")], by.x = "Gene", by.y = "gene_name")
+DEG_ATAC <- bind_rows(DEG_df_open, DEG_df_close)
+
+DEG_ATAC$Transcriptomics_Acute <- DEG_ATAC$avg_log2FC
+
+DEG_ATAC$avg_log2FC <- NULL
+
+# Log2FC of Accessibility
+atac$gene_name <- rownames(atac)
+
+DEG_ATAC <- merge(DEG_ATAC, atac[, c("gene_name", "avg_log2FC")], by.x = "query_region", by.y = "gene_name", all.x = TRUE)
+
+DEG_ATAC$Accessibility_Acute <- DEG_ATAC$avg_log2FC
+
+DEG_ATAC$avg_log2FC <- NULL
+```
+
+
+```{r}
+# Sub-Chronic
+DEG2 <- read_excel("~/R/Data/DEG_Sub-Chronic.xlsx")
+DEG2 <- DEG2 %>%
+  dplyr::filter(p_val_adj < 0.05)
+DEG2$Gene <- toupper(DEG2$Gene)
+
+DEG_df_open2 <- merge(DEG2, closest_genes_open2[, c("gene_name", "query_region")], by.x = "Gene", by.y = "gene_name")
+DEG_df_close2 <- merge(DEG2, closest_genes_close2[, c("gene_name", "query_region")], by.x = "Gene", by.y = "gene_name")
+DEG_ATAC2 <- bind_rows(DEG_df_open2, DEG_df_close2)
+
+DEG_ATAC2$Transcriptomics_SubChronic <- DEG_ATAC2$avg_log2FC
+
+DEG_ATAC2$avg_log2FC <- NULL
+
+# Log2FC of Accessibility
+atac2$gene_name <- rownames(atac2)
+
+DEG_ATAC2 <- merge(DEG_ATAC2, atac2[, c("gene_name", "avg_log2FC")], by.x = "query_region", by.y = "gene_name", all.x = TRUE)
+
+DEG_ATAC2$Accessibility_SubChronic <- DEG_ATAC2$avg_log2FC
+
+DEG_ATAC2$avg_log2FC <- NULL
+```
+
+
+```{r}
+# Tidy 
+DEG_ATAC <- DEG_ATAC %>%
+  dplyr::select(matches("Gene|^Transcriptomics|^Accessibility"))
+DEG_ATAC2 <- DEG_ATAC2 %>%
+  dplyr::select(matches("Gene|^Transcriptomics|^Accessibility"))
+ATAC <- merge(DEG_ATAC, DEG_ATAC2, by = "Gene", all.x = T)
+
+ATAC <- ATAC %>%
+ pivot_longer(
+    cols = starts_with("Transcriptomics") | starts_with("Accessibility"), 
+    names_to = c("omic", "timePoint"), 
+    names_sep = "_", 
+    values_to = "log2FC"
+  )
+
+atac_transcript <- ggplot(ATAC, aes(x = timePoint, y = log2FC, fill = omic)) + 
+  geom_bar(stat = "identity", position = "dodge") + 
+  facet_wrap(~ Gene, scales = "free_y") + 
+  theme_minimal() + 
+  labs(x = "Time Point", y = "log2FC", title = "Bar plot of log2FC by Time Point and Omic", caption = "*Only the ECM genes that have been significant in the differential accessibility chromatin analysis of scATAC-Seq are shown") + 
+  scale_fill_brewer(palette = "Set3")
+atac_transcript
+
+ggsave("~/R/Figures/ATAC_Transcriptomics_Peaks.png", dpi = 1080, height = 7, width =11)
+
+```
+
+
