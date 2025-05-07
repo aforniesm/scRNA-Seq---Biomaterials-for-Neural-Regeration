@@ -1,0 +1,564 @@
+---
+title: "Downstream_Analysis_Acute"
+output: html_document
+date: "2025-05-05"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F)
+```
+
+```{r}
+library(Seurat)
+library(dplyr)
+library(tidyverse)
+library(readxl)
+library(AnnotationDbi)
+library(org.Mm.eg.db)
+library(clusterProfiler)
+library(circlize)
+library(gridtext)
+library(ComplexHeatmap)
+```
+
+
+```{r}
+DEG_1dpi <- read_excel("~/R/Downloads/DEG_FirstDay.xlsx")
+DEG_7dpi <- read_excel("~/R/Downloads/DEG_Acute.xlsx")
+DEG_21dpi <- read_excel("~/R/Downloads/DEG_21dpi.xlsx")
+DEG_1mpi <- read_excel("~/R/Downloads/DEG_Sub-Chronic.xlsx")
+seurat_integrated_ME <- readRDS("~/R/Downloads/Seurat_Integrated_ME.rds")
+```
+
+
+Time: Acute - 7 dpi
+
+```{r}
+DEG_7dpi_filtered <- DEG_7dpi %>%
+  filter(p_val_adj < 0.001 & (avg_log2FC > 0.5 | avg_log2FC < -0.5))
+
+DEG_7dpi_filtered$regulation <- ifelse(DEG_7dpi_filtered$avg_log2FC > 0, "Up", "Down")
+
+DEG_7dpi_filtered$FC_Percentage_Cell_Expression <- (DEG_7dpi_filtered$pct.1 / DEG_7dpi_filtered$pct.2) - 1
+
+DEG_7dpi_filtered <- DEG_7dpi_filtered[order(DEG_7dpi_filtered$avg_log2FC, decreasing = TRUE), ]
+
+DEG_7dpi_filtered_up <- head(DEG_7dpi_filtered, 35)
+DEG_7dpi_filtered_down <- tail(DEG_7dpi_filtered, 35)
+
+DEG_7dpi_filtered <- bind_rows(DEG_7dpi_filtered_up, DEG_7dpi_filtered_down)
+
+DEG_7dpi_plot <- ggplot(DEG_7dpi_filtered, aes(x = Gene, avg_log2FC, y = avg_log2FC, fill = FC_Percentage_Cell_Expression)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  scale_fill_gradient(low = "steelblue", high = "firebrick") +
+  labs(
+    x = "Gene",
+    y = "Average log2FC",
+    fill = "Ratio of Cells Expressing the Gene"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.title = element_text(size = 9))
+DEG_7dpi_plot
+```
+
+
+Enrichment analysis
+
+```{r}
+
+relevant_genes_7dpi <- DEG_7dpi_filtered$Gene
+
+# Map gene symbols to ENTREZ IDs
+gene_entrez <- mapIds(org.Mm.eg.db,
+                      keys = relevant_genes_7dpi,
+                      keytype = "SYMBOL",
+                      column = "ENTREZID")
+gene_entrez <- na.omit(gene_entrez)
+
+# Perform GO enrichment
+go_res <- enrichGO(
+    gene = gene_entrez,
+    OrgDb = org.Mm.eg.db,
+    keyType = "ENTREZID",
+    ont = "BP")
+
+# Filter the GO terms from the enrichGO object directly
+pattern <- "neuronal|neur\\w*|neural|axon|spinal|glia|Wnt|STAT|Notch|phosphatidylinositol|MAPK|NF-kappaB|synap\\w*|acute|innate|adhesion|regeneration|Rho|glio\\w*|acute*"
+filtered_go_res <- go_res
+filtered_go_res@result <- filtered_go_res@result %>%
+  filter(str_detect(Description, regex(pattern, ignore_case = TRUE)))
+
+# Tidy table
+gene_go <- filtered_go_res@result %>%
+  as.data.frame() %>%
+  separate_rows(geneID, sep = "/") %>%
+  dplyr::select(gene = geneID, go_term = Description, pvalue) %>%
+  mutate(gene = mapIds(org.Mm.eg.db,
+                       keys = gene,
+                       keytype = "ENTREZID",
+                       column = "SYMBOL"))
+
+signaling_pathways <- list(
+  `TGF-β Signaling` = c(
+    "cellular response to transforming growth factor beta stimulus",
+    "response to transforming growth factor beta",
+    "transforming growth factor beta receptor signaling pathway",
+    "transforming growth factor beta receptor superfamily signaling pathway",
+    "regulation of transforming growth factor beta receptor signaling pathway",
+    "negative regulation of transforming growth factor beta receptor signaling pathway",
+    "positive regulation of transforming growth factor beta receptor signaling pathway",
+    "regulation of cellular response to transforming growth factor beta stimulus",
+    "positive regulation of cellular response to transforming growth factor beta stimulus",
+    "transforming growth factor beta1 production",
+    "transforming growth factor beta production",
+    "regulation of transforming growth factor beta1 production",
+    "positive regulation of transforming growth factor beta production",
+    "regulation of transforming growth factor beta production"
+  ),
+  
+  `Notch Signaling` = c(
+    "Notch signaling pathway",
+    "regulation of Notch signaling pathway",
+    "negative regulation of Notch signaling pathway"
+  ),
+  
+  `PI3K-AKT Signaling` = c(
+    "phosphatidylinositol 3-kinase/protein kinase B signal transduction",
+    "regulation of phosphatidylinositol 3-kinase/protein kinase B signal transduction",
+    "positive regulation of phosphatidylinositol 3-kinase/protein kinase B signal transduction"
+  ),
+  
+  `NF-κB Signaling` = c(
+    "non-canonical NF-kappaB signal transduction",
+    "regulation of non-canonical NF-kappaB signal transduction",
+    "positive regulation of non-canonical NF-kappaB signal transduction",
+    "canonical NF-kappaB signal transduction",
+    "regulation of canonical NF-kappaB signal transduction",
+    "positive regulation of canonical NF-kappaB signal transduction"
+  ),
+  
+  `Wnt Signaling` = c(
+    "Wnt signaling pathway",
+    "canonical Wnt signaling pathway",
+    "regulation of canonical Wnt signaling pathway",
+    "positive regulation of canonical Wnt signaling pathway",
+    "regulation of Wnt signaling pathway",
+    "positive regulation of Wnt signaling pathway"),
+
+  `MAPK Signaling` = "negative regulation of MAPK cascade"
+)
+
+# Categories
+gene_go <- gene_go %>%
+  mutate(
+    go_term_grouped = case_when(
+      go_term %in% signaling_pathways$`TGF-β Signaling` ~ "TGF-β Signaling",
+      go_term %in% signaling_pathways$`Notch Signaling` ~ "Notch Signaling",
+      go_term %in% signaling_pathways$`PI3K-AKT Signaling` ~ "PI3K-AKT Signaling",
+      go_term %in% signaling_pathways$`NF-κB Signaling` ~ "NF-κB Signaling",
+      go_term %in% signaling_pathways$`Wnt Signaling` ~ "Wnt Signaling",
+      go_term %in% signaling_pathways$`MAPK Signaling` ~ "MAPK Signaling",
+      TRUE ~ go_term  
+    )
+  ) %>%
+  group_by(go_term_grouped) %>%
+  mutate(
+    mean_pvalue_group = ifelse(
+      go_term_grouped %in% names(signaling_pathways),
+      mean(pvalue, na.rm = TRUE),
+      pvalue  
+    )
+  ) %>%
+  ungroup()
+
+gene_go <- gene_go[!grepl("substrate", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("prostate", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("leukocyte", gene_go$go_term), ]
+
+# 6. Matrix
+gene_go$presence <- 1
+
+gene_go_clean <- gene_go %>%
+  distinct(go_term_grouped, gene, .keep_all = TRUE)
+
+go_signaling <- gene_go_clean %>% 
+  filter(str_detect(go_term_grouped, "Signaling"))
+
+go_non_signaling <- gene_go_clean %>% 
+  filter(!str_detect(go_term_grouped, "Signaling"))
+
+binary_matrix_signaling <- go_signaling %>%
+  select(go_term_grouped, gene, presence) %>%
+  pivot_wider(names_from = gene, values_from = presence, values_fill = list(presence = 0))
+
+final_matrix_signaling <- go_signaling %>%
+  distinct(go_term_grouped, mean_pvalue_group) %>%
+  left_join(binary_matrix_signaling, by = "go_term_grouped") %>%
+  rowwise() %>%
+  mutate(total_count = sum(c_across(where(is.numeric))[-1])) %>%
+  ungroup()
+
+binary_matrix_non_signaling <- go_non_signaling %>%
+  select(go_term_grouped, gene, presence) %>%
+  pivot_wider(names_from = gene, values_from = presence, values_fill = list(presence = 0))
+
+final_matrix_non_signaling <- go_non_signaling %>%
+  distinct(go_term_grouped, mean_pvalue_group) %>%
+  left_join(binary_matrix_non_signaling, by = "go_term_grouped") %>%
+  rowwise() %>%
+  mutate(total_count = sum(c_across(where(is.numeric))[-1])) %>%
+  ungroup()
+
+# For signaling terms
+matrix_binary_signaling <- as.matrix(final_matrix_signaling[, !(colnames(final_matrix_signaling) %in% c("go_term_grouped", "mean_pvalue_group", "total_count"))])
+rownames(matrix_binary_signaling) <- final_matrix_signaling$go_term_grouped
+
+matrix_counts_signaling <- final_matrix_signaling$total_count
+names(matrix_counts_signaling) <- final_matrix_signaling$go_term_grouped
+
+matrix_pval_signaling <- -log10(final_matrix_signaling$mean_pvalue_group)
+names(matrix_pval_signaling) <- final_matrix_signaling$go_term_grouped
+
+# For non-signaling terms
+matrix_binary_non_signaling <- as.matrix(final_matrix_non_signaling[, !(colnames(final_matrix_non_signaling) %in% c("go_term_grouped", "mean_pvalue_group", "total_count"))])
+rownames(matrix_binary_non_signaling) <- final_matrix_non_signaling$go_term_grouped
+
+matrix_counts_non_signaling <- final_matrix_non_signaling$total_count
+names(matrix_counts_non_signaling) <- final_matrix_non_signaling$go_term_grouped
+
+matrix_pval_non_signaling <- -log10(final_matrix_non_signaling$mean_pvalue_group)
+names(matrix_pval_non_signaling) <- final_matrix_non_signaling$go_term_grouped
+
+col_fun  <- colorRamp2(c(0,1), c("#ebebf3", "#666ca8"))
+col_fun2 <- colorRamp2(c(min(matrix_counts_non_signaling), max(matrix_counts_non_signaling)), c("#FAEBD7", "#8B8378"))
+col_fun3 <- colorRamp2(c(min(matrix_pval_non_signaling), max(matrix_pval_non_signaling)), c("cadetblue", "tomato"))
+
+col_fun_  <- colorRamp2(c(0,1), c("#ebebf3", "#666ca8"))
+col_fun2_ <- colorRamp2(c(min(matrix_counts_signaling), max(matrix_counts_signaling)), c("#FAEBD7", "#8B8378"))
+col_fun3_ <- colorRamp2(c(min(matrix_pval_signaling), max(matrix_pval_signaling)), c("cadetblue", "tomato"))
+
+```
+
+Plots
+
+```{r}
+hm_binary_signaling <- Heatmap(matrix_binary_signaling,
+                               name = "Status",
+                               col = col_fun_,
+                               rect_gp = gpar(col = "white", lwd = 2),
+                               clustering_method_columns = "ward.D2",
+                               clustering_distance_columns = "euclidean",
+                               cluster_rows = FALSE,
+                               show_row_dend = FALSE,
+                               show_column_dend = FALSE,
+                               row_names_gp = gpar(fontsize = 7),
+                               row_names_side = "left",
+                               column_names_rot = 45,
+                               column_names_gp = gpar(fontsize = 8),
+                               heatmap_legend_param = list(title = "Status", at = c(0, 1),
+                                                           labels = c("Absent", "Present")),
+                               column_title = "Enrichment Analysis (Signaling)",
+                               column_title_gp = gpar(fontsize = 14))
+
+# Heatmap for signaling terms - Count
+hm_count_signaling <- Heatmap(matrix_counts_signaling,
+                              rect_gp = gpar(col = "white", lwd = 2),
+                              name = "Count",
+                              col = col_fun2_,
+                              cluster_rows = FALSE,
+                              cluster_columns = FALSE,
+                              show_row_names = FALSE,
+                              width = unit(1.2, "cm"),
+                              column_title = "Count",
+                              column_names_gp = gpar(fontsize = 8),
+                              column_title_gp = gpar(fontsize = 8))
+
+# Heatmap for signaling terms - P-value
+hm_pval_signaling <- Heatmap(matrix_pval_signaling,
+                             rect_gp = gpar(col = "white", lwd = 2),
+                             name = "-log10 P-value",
+                             col = col_fun3_,
+                             cluster_rows = FALSE,
+                             cluster_columns = FALSE,
+                             show_row_names = FALSE,
+                             width = unit(1.2, "cm"),
+                             column_title = "-log10 P-value",
+                             column_names_gp = gpar(fontsize = 8),
+                             column_title_gp = gpar(fontsize = 8))
+
+# Heatmap for non-signaling terms - Status (Presence/Absence)
+hm_binary_non_signaling <- Heatmap(matrix_binary_non_signaling,
+                                   name = "Status",
+                                   col = col_fun,
+                                   rect_gp = gpar(col = "white", lwd = 2),
+                                   clustering_method_columns = "ward.D2",
+                                   clustering_distance_columns = "euclidean",
+                                   cluster_rows = FALSE,
+                                   show_row_dend = FALSE,
+                                   show_column_dend = FALSE,
+                                   row_names_gp = gpar(fontsize = 7),
+                                   row_names_side = "left",
+                                   column_names_rot = 45,
+                                   column_names_gp = gpar(fontsize = 8),
+                                   heatmap_legend_param = list(title = "Status", at = c(0, 1),
+                                                               labels = c("Absent", "Present")),
+                                   column_title = "Enrichment Analysis (Non-Signaling)",
+                                   column_title_gp = gpar(fontsize = 14))
+
+# Heatmap for non-signaling terms - Count
+hm_count_non_signaling <- Heatmap(matrix_counts_non_signaling,
+                                  rect_gp = gpar(col = "white", lwd = 2),
+                                  name = "Count",
+                                  col = col_fun2,
+                                  cluster_rows = FALSE,
+                                  cluster_columns = FALSE,
+                                  show_row_names = FALSE,
+                                  width = unit(1.2, "cm"),
+                                  column_title = "Count",
+                                  column_names_gp = gpar(fontsize = 8),
+                                  column_title_gp = gpar(fontsize = 8))
+
+# Heatmap for non-signaling terms - P-value
+hm_pval_non_signaling <- Heatmap(matrix_pval_non_signaling,
+                                 rect_gp = gpar(col = "white", lwd = 2),
+                                 name = "-log10 P-value",
+                                 col = col_fun3,
+                                 cluster_rows = FALSE,
+                                 cluster_columns = FALSE,
+                                 show_row_names = FALSE,
+                                 width = unit(1.2, "cm"),
+                                 column_title = "-log10 P-value",
+                                 column_names_gp = gpar(fontsize = 8),
+                                 column_title_gp = gpar(fontsize = 8))
+
+draw(hm_binary_non_signaling + hm_count_non_signaling + hm_pval_non_signaling)
+draw(hm_binary_signaling + hm_count_signaling + hm_pval_signaling)
+
+```
+
+HeatMap
+ch
+```{r}
+Idents(seurat_integrated_ME) <- "time"
+
+astro <- subset(seurat_integrated_ME, subset = celltype == "Astrocytes")
+DEG_astro <- FindMarkers(astro, ident.1 = "7dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST")
+DEG_astro$Gene <- rownames(DEG_astro)
+DEG_astro$celltype <- "Astrocytes"
+
+neuron <- subset(seurat_integrated_ME, subset = celltype == "Neurons")
+DEG_neuron <- FindMarkers(neuron, ident.1 = "7dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST")
+DEG_neuron$Gene <- rownames(DEG_neuron)
+DEG_neuron$celltype <- "Neurons"
+
+microglia <- subset(seurat_integrated_ME, subset = celltype == "Microglia")
+DEG_microglia <- FindMarkers(microglia, ident.1 = "7dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST")
+DEG_microglia$Gene <- rownames(DEG_microglia)
+DEG_microglia$celltype <- "Microglia"
+
+opc <- subset(seurat_integrated_ME, subset = celltype == "OPCs")
+DEG_opc <- FindMarkers(opc, ident.1 = "7dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST")
+DEG_opc$Gene <- rownames(DEG_opc)
+DEG_opc$celltype <- "OPCs"
+
+ependymal <- subset(seurat_integrated_ME, subset = celltype == "Ependymal cells")
+DEG_ependymal <- FindMarkers(endothelial, ident.1 = "7dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST")
+DEG_ependymal$Gene <- rownames(DEG_ependymal)
+DEG_ependymal$celltype <- "Ependymal cells"
+
+vascular <- subset(seurat_integrated_ME, subset = celltype == "Vascular")
+DEG_vascular <- FindMarkers(vascular, ident.1 = "7dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST")
+DEG_vascular$Gene <- rownames(DEG_vascular)
+DEG_vascular$celltype <- "Vascular cells"
+
+immune <- subset(seurat_integrated_ME, subset = celltype == "Immune cells")
+DEG_immune<- FindMarkers(immune, ident.1 = "7dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST")
+DEG_immune$Gene <- rownames(DEG_immune)
+DEG_immune$celltype <- "Immune cells"
+
+oligodendrocyte <- subset(seurat_integrated_ME, subset = celltype == "Oligodendrocytes")
+DEG_oligodendrocyte <- FindMarkers(oligodendrocyte, ident.1 = "7dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST")
+DEG_oligodendrocyte$Gene <- rownames(DEG_oligodendrocyte)
+DEG_oligodendrocyte$celltype <- "Oligodendrocytes"
+
+combined_results <- bind_rows(DEG_astro, DEG_neuron, DEG_microglia, DEG_opc, DEG_oligodendrocyte, DEG_immune, DEG_vascular, DEG_ependymal)
+
+combined_results$time <- "7dpi"
+
+write.xlsx(combined_results, "~/R/Data/DEG_Celltype_7dpi.xlsx")
+
+datasets <- list(DEG_astro, DEG_neuron, DEG_microglia, DEG_opc, DEG_oligodendrocyte, DEG_immune, DEG_vascular, DEG_ependymal)
+
+top_gene_names <- unlist(lapply(datasets, function(df) {
+  df_sorted <- df[order(df$avg_log2FC, decreasing = TRUE), ]
+  top2_up_genes <- head(df_sorted$Gene, 2)
+  top2_down_genes <- tail(df_sorted$Gene, 2)
+  c(top2_up_genes, top2_down_genes)
+}))
+
+genes_up <- DEG_upregulated$Gene
+genes_down <- DEG_downregulated$Gene
+
+combined_results <- combined_results %>%
+  filter(Gene %in% genes_down | Gene %in% genes_up | Gene %in% top_gene_names)
+
+heatmap_data <- combined_results %>%
+  select(Gene, celltype, avg_log2FC) %>%
+  pivot_wider(names_from = celltype, values_from = avg_log2FC) %>%
+  column_to_rownames("Gene") %>%
+  as.matrix()
+
+heatmap_data[is.na(heatmap_data)] <- 0
+
+library(ComplexHeatmap)
+heatmap <- Heatmap(
+  heatmap_data,
+  col = circlize::colorRamp2(c(-7, 0, 7), c("blue", "white", "red")),
+  row_names_gp = gpar(fontsize = 8),
+  column_names_gp = gpar(fontsize = 8),
+  name = "log2FC", row_title = "Genes", row_title_side = "right", column_title = "Cell types", column_title_side = "bottom"
+)
+
+heatmap
+
+```
+
+For 1 dpi
+
+Enrichment analysis
+
+```{r}
+
+relevant_genes2 <- subset(DEG2, p_val_adj < 0.05 & abs(avg_log2FC) > 0.5)
+
+relevant_genes2 <- rownames(relevant_genes2)
+
+deg_entrez2 <- bitr(relevant_genes2, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Mm.eg.db)
+deg_entrez2 <- deg_entrez2$ENTREZID
+
+# GO ENRICHMENT
+go_enrich2 <- enrichGO(
+  gene = deg_entrez2,
+  OrgDb = org.Mm.eg.db,
+  keyType = "ENTREZID", 
+  ont = "BP", qvalueCutoff =  0.1,
+  pAdjustMethod = "fdr")
+
+go_terms2 <- go_enrich2@result[["Description"]]
+
+keywords <- c("neuro", "inflammation", "Wnt", "Rho", "regeneration", "remodelling", "SCI", "axonal", "axon","BMP", "spinal")
+
+terms_of_interest <- go_terms2[sapply(go_terms2, function(x) any(grepl(paste(keywords, collapse="|"), x, ignore.case = TRUE)))]
+
+terms_of_interest <- terms_of_interest[!grepl("muscle", terms_of_interest, ignore.case = TRUE)]
+
+go_enrich_df2 <- as.data.frame(go_enrich2@result)
+
+filtered_go_enrich_df2 <- go_enrich_df2 %>% filter(Description %in% terms_of_interest)
+
+filtered_go_enrich2 <- go_enrich2
+filtered_go_enrich2@result <- filtered_go_enrich_df2  
+
+go_enrich_barplot2 <- barplot(filtered_go_enrich2) + 
+  theme(axis.text.y = element_text(size = 9)) + 
+  ggtitle("GO ENRICHMENT ANALYSIS OF DEG - 1dpi") + labs(caption = "GO Terms Filtered by Spinal Cord Injury related Biological Process")
+
+go_enrich_barplot2
+
+ggsave("~/R/Figures/Enrichment_Analysis_FirstDay.png", go_enrich_barplot2, dpi = 1080, height = 7, width = 9)
+```
+
+
+
+```{r}
+
+DEG2$baseline_exp <- 0
+
+DEG_upregulated2 <- DEG2 %>%
+  arrange(desc(avg_log2FC)) %>% head(15)
+
+DEG_downregulated2 <- DEG2 %>%
+  arrange(desc(avg_log2FC)) %>% tail(15)
+
+DEG_TOP2 <- bind_rows(DEG_downregulated2, DEG_upregulated2)
+
+```
+
+HeatMap
+
+```{r}
+Idents(seurat_integrated_ME) <- "time"
+
+DEG_astro2 <- FindMarkers(astro, ident.1 = "1dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST")
+DEG_astro2$Gene <- rownames(DEG_astro2)
+DEG_astro2$celltype <- "Astrocytes"
+
+DEG_neuron2 <- FindMarkers(neuron, ident.1 = "1dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST")
+DEG_neuron2$Gene <- rownames(DEG_neuron2)
+DEG_neuron2$celltype <- "Neurons"
+
+DEG_microglia2 <- FindMarkers(microglia, ident.1 = "1dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST")
+DEG_microglia2$Gene <- rownames(DEG_microglia2)
+DEG_microglia2$celltype <- "Microglia"
+
+DEG_opc2 <- FindMarkers(opc, ident.1 = "1dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST")
+DEG_opc2$Gene <- rownames(DEG_opc2)
+DEG_opc2$celltype <- "OPCs"
+
+DEG_endothelial2 <- FindMarkers(endothelial, ident.1 = "1dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST")
+DEG_endothelial2$Gene <- rownames(DEG_endothelial2)
+DEG_endothelial2$celltype <- "Endothelial"
+
+DEG_oligodendrocyte2 <- FindMarkers(oligodendrocyte, ident.1 = "1dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST")
+DEG_oligodendrocyte2$Gene <- rownames(DEG_oligodendrocyte2)
+DEG_oligodendrocyte2$celltype <- "Oligodendrocytes"
+
+combined_results2 <- bind_rows(DEG_astro2, DEG_neuron2, DEG_microglia2, DEG_opc2, DEG_oligodendrocyte2, DEG_endothelial2)
+
+combined_results2$time <- "1dpi"
+
+write.xlsx(combined_results2, "~/R/Data/DEG_Celltype_1dpi.xlsx")
+
+genes_up <- DEG_upregulated2$Gene
+genes_down <- DEG_downregulated2$Gene
+
+datasets <- list(DEG_astro2, DEG_neuron2, DEG_microglia2, DEG_opc2, DEG_oligodendrocyte2, DEG_endothelial2)
+
+top_gene_names2 <- unlist(lapply(datasets, function(df) {
+  df_sorted <- df[order(df$avg_log2FC, decreasing = TRUE), ]
+  top2_up_genes <- head(df_sorted$Gene, 2)
+  top2_down_genes <- tail(df_sorted$Gene, 2)
+  c(top2_up_genes, top2_down_genes)
+}))
+
+combined_results2 <- combined_results2 %>%
+  filter(Gene %in% genes_down | Gene %in% genes_up | Gene %in% top_gene_names2)
+
+heatmap_data2 <- combined_results2 %>%
+  select(Gene, celltype, avg_log2FC) %>%
+  pivot_wider(names_from = celltype, values_from = avg_log2FC) %>%
+  column_to_rownames("Gene") %>%
+  as.matrix()
+
+heatmap_data2[is.na(heatmap_data2)] <- 0
+
+order <- c("Endothelial","Microglia", "OPCs", "Astrocytes", "Neurons", "Oligodendrocytes")
+
+heatmap_data2 <- heatmap_data2 [, order ]
+
+library(ComplexHeatmap)
+heatmap2 <- Heatmap(
+  heatmap_data2,
+  col = circlize::colorRamp2(c(-7, 0, 7), c("blue", "white", "red")),
+  row_names_gp = gpar(fontsize = 8),
+  column_names_gp = gpar(fontsize = 8),
+  name = "log2FC", row_title = "Genes", row_title_side = "right", column_title = "Cell types", column_title_side = "bottom", use_raster = T, raster_quality = 5, raster_device = "png"
+)
+
+heatmap2
+
+
+```
+
+

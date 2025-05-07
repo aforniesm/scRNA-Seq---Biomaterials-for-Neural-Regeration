@@ -192,7 +192,6 @@ correlation <- ggplot(correlation_table2, aes(x = log2FC_Transcriptomics, y = lo
   )) +
   theme(legend.position = "bottom")
 correlation
-ggplotly(correlation)
 ggsave("~/R/Figures/Proteomic_Correlation_Sub-Chronic (4-6 wpi).png", correlation, dpi = 1080, height = 7, width = 9)
 ```
 

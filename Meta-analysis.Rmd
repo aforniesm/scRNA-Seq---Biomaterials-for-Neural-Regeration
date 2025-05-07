@@ -1,0 +1,446 @@
+---
+title: "Meta-analysis"
+output: html_document
+date: "2025-02-26"
+---
+ 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F)
+```
+
+Packages used: 
+
+```{r}
+library(Seurat)
+library(Matrix)
+library(biomaRt)
+library(AnnotationDbi)
+library(org.Mm.eg.db)
+library(ggplot2)
+library(dplyr)
+library(stringr)
+library(glmGamPoi)
+library(readxl)
+library(EnhancedVolcano)
+library(BiocParallel)
+library(speckle)
+library(presto)
+library(enrichplot)
+library(clusterProfiler)
+library(MAST)
+library(plotly)
+library(openxlsx)
+library(patchwork)
+library(tibble)
+```
+
+```{r}
+load(file = "~/R/Data/Seurats_Acute.RData")
+load(file = "~/R/Data/Seurats_Chronic.RData")
+rm(seurat_list, seurat_list_norm)
+```
+
+```{r}
+Idents(seurat) <- "time"
+Idents(seurat2) <- "time"
+Idents(seurat3) <- "time"
+Idents(seurat4) <- "time"
+Idents(seurat5) <- "time"
+```
+
+Normalization
+
+```{r}
+# Normalization of 3 datasets
+seurat_list <- list(seurat, seurat2, seurat3, seurat4, seurat5)
+seurat_list_norm <- list()
+
+for (i in seq_along(seurat_list)) {
+  seurat_norm_i <- NormalizeData(seurat_list[[i]], normalization.method = "LogNormalize", verbose = TRUE)
+  seurat_norm_i <- FindVariableFeatures(seurat_norm_i, selection.method = "vst", nfeatures = 5000, verbose = TRUE)
+  seurat_list_norm[[i]] <- seurat_norm_i
+  rm(seurat_norm_i)}
+
+rm(seurat_list, seurat, seurat2, seurat3, seurat4, seurat5)
+```
+
+Transfer cell type annotations
+
+FindTransferAnchors, TransferData and AddMetadata are used to update the seurat objects with the new predicted annotations based on reference annotations provided by Seurat from Skinnider 2024.
+
+```{r}
+
+# Cell Annotation 
+seurat_list_annotated <- lapply(seq_along(seurat_list_norm), function(i) {
+  seurat_norm <- seurat_list_norm[[i]]
+  
+  if (i == 3) {
+    return(seurat_norm)}
+  
+  anchors <- FindTransferAnchors(reference = seurat_list_norm [[3]], query = seurat_norm, dims = 1:20)
+  predictions <- TransferData(anchorset = anchors, refdata = seurat_list_norm [[3]]$celltype, dims = 1:20)
+  seurat_norm <- AddMetaData(seurat_norm, metadata = predictions)
+  
+  return(seurat_norm)
+})
+
+rm(seurat_list_norm)
+```
+
+Scale, RunPCA, Run UMAP
+
+```{r}
+
+features <- SelectIntegrationFeatures(
+  object.list = seurat_list_annotated, 
+  nfeatures = 3500)
+
+seurat_list <- lapply(X = seurat_list_annotated, FUN = function(x) {x <- ScaleData(x, features =  features)
+x <- RunPCA(x, features = features, npcs = 30)
+x <- RunUMAP(x, dims = 1:20)})
+
+seurat_norm <- seurat_list[[1]]
+seurat2_norm <- seurat_list[[2]]
+seurat3_norm <- seurat_list[[3]]
+seurat4_norm <- seurat_list[[4]]
+seurat5_norm <- seurat_list[[5]]
+
+rm(seurat_list_annotated)
+```
+
+UMAP of the 3 datasets before integration
+
+```{r}
+combined_seurat <- merge(
+  x = seurat_norm,
+  y = list(seurat2_norm, seurat3_norm, seurat4_norm, seurat5_norm), project = "MergedProject")
+
+combined_seurat <- ScaleData(combined_seurat)
+combined_seurat <- RunPCA(combined_seurat)
+combined_seurat <- RunUMAP(combined_seurat, dims = 1:20)
+
+umap_meta <- DimPlot(combined_seurat, group.by = "dataset") + theme(axis.text.x = element_text(angle = 60, hjust = 1, size = 7)) + labs(title = "UMAP Plot Before Integration", x = "UMAP 1", y = "UMAP 2")
+
+ggsave("~/R/Figures/UMAP_BeforeIntegration_MetaAnalysis.png", umap_meta, dpi = 1080, height = 14, width = 8)
+
+rm(seurat2_norm, seurat_norm, seurat3_norm, seurat4_norm, seurat5_norm)
+rm(combined_seurat)
+```
+
+Integrate the three datasets and scale the integrated seurat object.
+
+```{r}
+ecm <- read_excel("~/R/Data/MAIN_ECM_Proteome.xlsx")
+genes_of_interest <- ecm$Gene
+
+features <- c(features, genes_of_interest)
+
+features <- unique(features)
+
+features <- intersect(features, rownames(seurat_list[[1]]))
+features <- intersect(features, rownames(seurat_list[[2]])) 
+features <- intersect(features, rownames(seurat_list[[3]]))
+features <- intersect(features, rownames(seurat_list[[4]]))
+features <- intersect(features, rownames(seurat_list[[5]]))
+
+gc()
+anchors_integration <- FindIntegrationAnchors(object.list = seurat_list, dims = 1:30, verbose = TRUE, reduction = "cca", anchor.features = features, scale = F, normalization.method = "LogNormalize", k.anchor = 25, k.score = 30, k.filter = 150)
+
+rm(seurat_list)
+
+save.image(file = "~/R/Downloads/AllData_Anchors.RData")
+
+load(file = "~/R/Downloads/AllData_Anchors.RData")
+gc()
+seurat_integrated <- IntegrateData(anchorset = anchors_integration, dims = 1:30, verbose = TRUE, normalization.method = "LogNormalize") 
+
+rm(seurat_list, anchors, anchors_integration)
+
+save.image(file = "~/R/Downloads/AllData_CCA.RData")
+```
+
+* Correct metadata issues
+
+```{r}
+
+metadata <- seurat_integrated@meta.data
+metadata <- metadata %>% select(matches("nCount_RNA|nFeature_RNA|time|celltype|technology|dataset|predicted.id"))
+
+metadata$time[metadata$time == "Sub-Acute"] <- "21 dpi"
+metadata$time[metadata$time == "Sub-Chronic"] <- "4-6 wpi"
+
+metadata$predicted.id[metadata$dataset == "Skinnider_2024"] <- metadata$celltype[metadata$dataset == "Skinnider_2024"]
+
+# Return check metadata into seurat object
+seurat_integrated@meta.data <- metadata
+
+metadata$celltype <- NULL
+colnames(metadata)[colnames(metadata) == "predicted.id"] <- "celltype"
+
+# Return check metadata into seurat object
+seurat_integrated@meta.data <- metadata
+
+Idents(seurat_integrated) <- "time"
+
+rm(predictions, metadata)
+```
+
+
+```{r}
+# Descriptive
+table(seurat_integrated$celltype)
+table(seurat_integrated$time)
+table(seurat_integrated$dataset)
+``` 
+
+Cell Cycle Score
+
+```{r}
+
+cell_cycle_markers <- read.csv("~/R/Data/Mus_musculus.csv")
+s_genes <- cell_cycle_markers %>% dplyr::filter(phase == "S") %>% pull("geneID")
+g2m_genes <- cell_cycle_markers %>% dplyr::filter(phase == "G2/M") %>% pull("geneID")
+s_genes <- AnnotationDbi::select(org.Mm.eg.db,
+                                   keys = s_genes,
+                                   keytype = "ENSEMBL",
+                                   columns = c("SYMBOL"))
+g2m_genes <- AnnotationDbi::select(org.Mm.eg.db,
+                                   keys = g2m_genes,
+                                   keytype = "ENSEMBL",
+                                   columns = c("SYMBOL"))
+
+seurat_integrated <- CellCycleScoring(seurat_integrated, g2m.features = g2m_genes$SYMBOL, s.features = s_genes$SYMBOL)
+
+```
+
+UMAP after integration
+
+```{r}
+seurat_integrated <- ScaleData(seurat_integrated)
+seurat_integrated <- RunPCA(seurat_integrated, verbose = T, dims = 1:20) 
+seurat_integrated <- RunUMAP(seurat_integrated, dims = 1:20)
+
+
+celltype <- DimPlot(seurat_integrated, group.by = "celltype") + ggtitle("Celltypes")
+celltype
+
+ggsave("~/R/Figures/Cells_MetaAnalysis.png", celltype, dpi = 1080, height = 7, width = 10)
+
+```
+
+Possible covariates
+
+```{r}
+cc_score <- DimPlot(seurat_integrated,
+        reduction = "umap",
+        group.by= "Phase",
+        split.by = "time")
+cc_score
+ggsave("~/R/Figures/CC_Acute.png", cc_score, dpi = 1080, height = 7, width = 9)
+
+# Differences between CC phases: Yes/No?
+
+umap_dataset <- DimPlot(seurat_integrated,
+        reduction = "umap",
+        group.by= "dataset")
+umap_dataset
+
+ggsave("~/R/Figures/UMAP_AfterIntegration_MetaAnalysis.png", umap_dataset, dpi = 1080, height = 7, width = 12)
+```
+
+LISI
+
+```{r}
+library(lisi)
+
+embeddings <- Embeddings(seurat_integrated, reduction = "umap") 
+
+metadata <- seurat_integrated@meta.data
+batch_labels <- metadata$dataset  
+celltype_labels <- metadata$celltype
+
+lisi_scores <- lisi::compute_lisi(X = embeddings, meta_data = data.frame(batch = seurat_integrated$dataset, celltype = seurat_integrated$celltype), label_colnames = c("batch", "celltype"), perplexity = 100)
+
+lisi_df <- data.frame(
+  Batch_LISI = lisi_scores$batch,
+  CellType_LISI = lisi_scores$celltype)
+
+batch_plot <- ggplot(lisi_df, aes(x = Batch_LISI)) +
+  geom_density(fill = "salmon", alpha = 0.7) +
+  geom_vline(xintercept = 1, linetype = "dashed", color = "red") +
+  labs(title = "LISI - Batch (Dataset)",
+       x = "LISI Score",
+       y = "Density") +
+  theme_minimal() +
+  xlim(c(1, max(lisi_df$Batch_LISI)))
+
+celltype_plot <- ggplot(lisi_df, aes(x = CellType_LISI)) +
+  geom_density(fill = "steelblue", alpha = 0.7) +
+  labs(title = "LISI - Cell Type",
+       x = "LISI Score",
+       y = "Density") +
+  theme_minimal() +
+  xlim(c(1, max(lisi_df$CellType_LISI)))
+
+combined_plot <- batch_plot + celltype_plot +
+  plot_annotation(title = "Evaluation of the Integration by LISI",
+                  subtitle = paste("Número de células:", nrow(embeddings)))
+
+print(combined_plot)
+
+summary_stats <- data.frame(
+  Metric = c("Batch LISI", "CellType LISI"),
+  Mean = c(mean(lisi_df$Batch_LISI), mean(lisi_df$CellType_LISI)),
+  Median = c(median(lisi_df$Batch_LISI), median(lisi_df$CellType_LISI)),
+  SD = c(sd(lisi_df$Batch_LISI), sd(lisi_df$CellType_LISI))
+)
+
+print(summary_stats)
+
+```
+
+```{r}
+
+seurat_integrated@meta.data <- seurat_integrated@meta.data %>%
+  mutate(celltype_grouped = case_when(
+    celltype %in% c("Mature oligodendrocytes (MOL)", 
+                    "Myelin forming oligodendrocytes (MFOL)", 
+                    "Newly formed oligodendrocytes (NFOL)") ~ "Oligodendrocytes",
+    celltype == "Oligodendrocytes precursor cells (OPC)" ~ "OPCs",
+    celltype == "Astrocytes" ~ "Astrocytes",
+    celltype == "Ependymal cells" ~ "Ependymal cells",
+    celltype == "Microglia" ~ "Microglia",
+    celltype %in% c("B cells", "NK, T cells", "Myeloid, dividing", "Peripheral immune cells") ~ "Immune cells",
+    celltype %in% c("Vascular cells", "Vascular endothelial cells") ~ "Vascular",
+    celltype %in% c("Dorsal", "Ventral") ~ "Neurons",
+    TRUE ~ "Other"
+  ))
+
+seurat_integrated@meta.data$celltype <- seurat_integrated@meta.data$celltype_grouped
+
+table(seurat_integrated@meta.data$celltype)
+```
+
+Filter ECM genes
+
+```{r}
+proteins.ME <- read_excel("~/R/Data/MAIN_ECM_Proteome.xlsx")
+genes_to_keep <- proteins.ME$Gene
+rownames_seurat <- rownames(seurat_integrated)
+rows_to_keep <- which(rownames_seurat %in% genes_to_keep)
+seurat_integrated_ME <- seurat_integrated[rows_to_keep, ]
+
+paste("ECM Genes present in the dataset:", nrow(seurat_integrated_ME))
+
+saveRDS(seurat_integrated_ME, "~/R/Downloads/Seurat_Integrated_ME.rds")
+
+```
+
+Differential expression analysis.
+
+FindMarkers analysis
+
+```{r}
+
+Idents(seurat_integrated_ME) <- "time"
+
+DEG <- FindMarkers(seurat_integrated_ME,  ident.1 = "7dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", layer = "data")
+
+DEG$Gene <- rownames(DEG)
+
+DEG$p_val_adj <- ifelse(DEG$p_val_adj == 0, 1e-305, DEG$p_val_adj)
+
+DEG$Time <- "7 dpi"
+
+volcanoplot <- EnhancedVolcano(DEG, lab = rownames(DEG), x = "avg_log2FC", y = "p_val_adj", pCutoff = 0.05, FCcutoff = 0.75, title = "Differential expression between Uninjured and Acute conditions", drawConnectors = T, labSize = 3)
+
+write.xlsx(DEG, "~/R/Downloads/DEG_Acute.xlsx")
+
+ggsave("~/R/Figures/Volcano_Acute.png", volcanoplot, dpi = 1080, height = 7, width = 9)
+
+##############################################################################################################
+
+DEG2 <- FindMarkers(seurat_integrated_ME,  ident.1 = "1dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", layer = "data")
+
+DEG2$Gene <- rownames(DEG2)
+
+DEG2$p_val_adj <- ifelse(DEG2$p_val_adj == 0, 1e-305, DEG2$p_val_adj)
+
+DEG2$Time <- "1 dpi"
+
+volcanoplot2 <- EnhancedVolcano(DEG2, lab = rownames(DEG2), x = "avg_log2FC", y = "p_val_adj", pCutoff = 0.05, FCcutoff = 0.75, title = "Differential expression between Uninjured and Acute conditions", drawConnectors = T, labSize = 3)
+
+ggsave("~/R/Figures/Volcano_1dpi.png", volcanoplot2, dpi = 1080, height = 7, width = 9)
+
+write.xlsx(DEG2, "~/R/Downloads/DEG_FirstDay.xlsx")
+
+##############################################################################################################
+
+DEG3 <- FindMarkers(seurat_integrated_ME,  ident.1 = "4-6 wpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", layer = "data")
+
+DEG3$Gene <- rownames(DEG3)
+
+DEG3$p_val_adj <- ifelse(DEG3$p_val_adj == 0, 1e-305, DEG3$p_val_adj)
+
+DEG3$Time <- "4-6 wpi"
+
+volcanoplot3 <- EnhancedVolcano(DEG3, lab = rownames(DEG3), x = "avg_log2FC", y = "p_val_adj", pCutoff = 0.05, FCcutoff = 0.75, title = "Differential expression between Uninjured and Acute conditions", drawConnectors = T, labSize = 3)
+
+ggsave("~/R/Figures/Volcano_4-6wpi.png", volcanoplot3, dpi = 1080, height = 7, width = 9)
+
+write.xlsx(DEG3, "~/R/Downloads/DEG_Sub-Chronic.xlsx")
+
+##############################################################################################################
+
+DEG4 <- FindMarkers(seurat_integrated_ME,  ident.1 = "21 dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", layer = "data")
+
+DEG4$Gene <- rownames(DEG4)
+
+DEG4$p_val_adj <- ifelse(DEG4$p_val_adj == 0, 1e-305, DEG4$p_val_adj)
+
+DEG4$Time <- "21 dpi"
+
+volcanoplot4 <- EnhancedVolcano(DEG4, lab = rownames(DEG4), x = "avg_log2FC", y = "p_val_adj", pCutoff = 0.05, FCcutoff = 0.75, title = "Differential expression between Uninjured and Acute conditions", drawConnectors = T, labSize = 3)
+
+ggsave("~/R/Figures/Volcano_21dpi.png", volcanoplot4, dpi = 1080, height = 7, width = 9)
+
+write.xlsx(DEG4, "~/R/Downloads/DEG_21dpi.xlsx")
+
+```
+
+```{r}
+
+DEGs <- bind_rows(DEG, DEG2, DEG3, DEG4)
+
+DEGs <- DEGs %>%
+  filter(p_val_adj < 0.05)
+
+peaks_abs <- DEGs %>%
+  mutate(abs_log2FC = abs(avg_log2FC)) %>%
+  group_by(Gene) %>%
+  filter(abs_log2FC == max(abs_log2FC)) %>%
+  slice(1) %>%  
+  ungroup()
+
+peaks_filtered <- peaks_abs %>%
+  filter(abs_log2FC > 1)
+
+counts_abs <- peaks_abs %>%
+  group_by(Time) %>%
+  summarise(n_genes = n(), .groups = "drop")
+
+
+time_order <- c("1 dpi", "7 dpi", "21 dpi", "4-6 wpi")
+
+counts$Time <- factor(counts$Time, levels = time_order)
+
+ggplot(counts, aes(x = Time, y = n_genes)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(
+    x = "Time Point",
+    y = "Number of Genes with Expression Peak",
+    fill = "Direction"
+  ) +
+  theme_minimal(base_size = 14)
+```
+

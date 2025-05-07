@@ -9,7 +9,6 @@ knitr::opts_chunk$set(echo = F)
 ```
 
 ```{r}
-
 library(readxl)
 library(ggplot2)
 library(ggvenn)
@@ -20,6 +19,7 @@ library(purrr)
 library(venn)
 library(ComplexHeatmap)
 library(circlize)
+library(tidyverse)
 
 # Data of DEGs
 times <- c("Acute (7 dpi)", "Sub-Chronic (4-6 wpi)", "Sub-Acute (21 dpi)", "First-Day (1 dpi)")
@@ -94,25 +94,94 @@ proteins <- proteins [, c("Gene", "Matrisome.Category")]
 results <-  merge(results, proteins, by = "Gene")
 results$`Before-Injury` <- 0 
 
-results <-  results %>% 
-  filter(`Acute (7 dpi)` > 0.7 & `Sub-Chronic (4-6 wpi)` > 0.15 | `Acute (7 dpi)` < -0.7 & `Sub-Chronic (4-6 wpi)` < -0.15)
+results1 <-  results %>% 
+  filter(`Acute (7 dpi)` > 0.7 | `Acute (7 dpi)` < -0.7 )
 
-results_long <- results %>%
+results2 <-  results %>% 
+  filter(`Sub-Chronic (4-6 wpi)` > 0.7 | `Sub-Chronic (4-6 wpi)` < -0.7)
+
+interest_genes <- c("Tnr", "Tnn", "Lgals3", "Anxa3", "Fn1", "Serpina3n", "Adam23", "Tgm2", "C1qc", "C1qa", "C1qb", "Ctsb", "Ctsd", "Ctsz", "Timp1", "Timp3", "Timp2", "Serpinb1a", "Serpind1", "Vwa1", "Vit", "Itih3", "Htra1", "Serpinh1", "Lgi1", "Dcn", "Thbs2", "S100a6", "Pcolce", "Tgfb1", "Tnc", "Cxcl12", "Loxl1", "Matn2", "Postn", "Mmp14", "A2m", "Spock3", "Spock2", "Hapln2", "Hapln2", "Lama2", "Lama1", "Emilin1", "Tinagl1", "Bcan")
+
+results1 <-  results1 %>% 
+  filter(Gene %in% interest_genes)
+
+results2 <-  results2 %>% 
+  filter(Gene %in% interest_genes)
+
+results_long1 <- results1 %>%
   pivot_longer(cols = c(`Before-Injury`,`First-Day (1 dpi)`, `Acute (7 dpi)`,`Sub-Acute (21 dpi)`, `Sub-Chronic (4-6 wpi)`), names_to = "TimePoint", values_to = "log2FC") %>% mutate(TimePoint = factor(TimePoint, levels = c("Before-Injury", "First-Day (1 dpi)", "Acute (7 dpi)", "Sub-Acute (21 dpi)", "Sub-Chronic (4-6 wpi)")))
 
-timevariation <- ggplot(results_long, aes(x = TimePoint, y = log2FC, group = Gene, color = Gene)) +
+results_long2 <- results2 %>%
+  pivot_longer(cols = c(`Before-Injury`,`First-Day (1 dpi)`, `Acute (7 dpi)`,`Sub-Acute (21 dpi)`, `Sub-Chronic (4-6 wpi)`), names_to = "TimePoint", values_to = "log2FC") %>% mutate(TimePoint = factor(TimePoint, levels = c("Before-Injury", "First-Day (1 dpi)", "Acute (7 dpi)", "Sub-Acute (21 dpi)", "Sub-Chronic (4-6 wpi)")))
+
+timevariation1 <- ggplot(results_long1, aes(x = TimePoint, y = log2FC, group = Gene, color = Gene)) +
   geom_line() +
   geom_point() +
-  geom_text_repel(data = results_long %>% filter(TimePoint == "Sub-Chronic (4-6 wpi)"), aes(label = Gene), size = 3, nudge_x = 0.3, direction = "y", segment.color = "grey50") + theme_minimal() + labs(x = "Time Point", y = "log2 Fold Change", title = "Expression Changes Over Time") + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_color_viridis_d() + facet_grid(. ~ Matrisome.Category, scales = "free_y")
+  geom_text_repel(data = results_long1 %>% filter(TimePoint == "Sub-Chronic (4-6 wpi)"), aes(label = Gene), size = 3, nudge_x = 0.3, direction = "y", segment.color = "grey50") + theme_minimal() + labs(x = "Time Point", y = "log2 Fold Change", title = "Expression Changes Over Time") + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_color_viridis_d() + facet_wrap(. ~ Matrisome.Category, scales = "free_y")
 
-timevariation
+timevariation1
 
-ggsave("~/R/Figures/Layout.png",timevariation, dpi = 1080, width = 14, height = 7)
+ggsave("~/R/Figures/Layout_Acute.png",timevariation1, dpi = 1080, width = 14, height = 7)
 
-results_long <- results_long %>%
+timevariation2 <- ggplot(results_long2, aes(x = TimePoint, y = log2FC, group = Gene, color = Gene)) +
+  geom_line() +
+  geom_point() +
+  geom_text_repel(data = results_long2 %>% filter(TimePoint == "Sub-Chronic (4-6 wpi)"), aes(label = Gene), size = 3, nudge_x = 0.3, direction = "y", segment.color = "grey50") + theme_minimal() + labs(x = "Time Point", y = "log2 Fold Change", title = "Expression Changes Over Time") + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_color_viridis_d() + facet_grid(. ~ Matrisome.Category, scales = "free_y")
+
+timevariation2
+
+ggsave("~/R/Figures/Layout_Chronic.png", timevariation2, dpi = 1080, width = 14, height = 7)
+
+library(patchwork)
+
+t <- timevariation1 + timevariation2
+t
+```
+
+Per gene
+```{r}
+results_long1 <- results_long1 %>%
+  mutate(TimePoint = factor(TimePoint, levels = c(
+    "Before-Injury",
+    "First-Day (1 dpi)",
+    "Acute (7 dpi)",
+    "Sub-Acute (21 dpi)",
+    "Sub-Chronic (4-6 wpi)"
+  ), ordered = TRUE))
+
+last_points <- results_long1 %>%
+  group_by(Gene) %>%
+  filter(TimePoint == max(TimePoint)) %>%
+  mutate(RegulationFinal = ifelse(log2FC > 0, "Up", "Down")) %>%
+  select(Gene, RegulationFinal)
+
+results_long1 <- results_long1 %>%
+  mutate(PointStatus = case_when(
+    log2FC > 0 ~ "Up",
+    log2FC < 0 ~ "Down",
+    TRUE ~ "Neutral"
+  ))
+
+timevariation_per_gene <- ggplot(results_long1, aes(x = TimePoint, y = log2FC, group = Gene)) +
+  geom_line(color = "gray") +
+  geom_point(aes(color = PointStatus)) +
+  theme_minimal() +
+  labs(x = "Time Point", y = "log2 Fold Change", title = "Expression Changes Over Time") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_color_manual(values = c("Up" = "forestgreen", "Down" = "firebrick", "Neutral" = "gray")) +
+  facet_wrap(. ~ Gene, scales = "free_y") +
+  theme(legend.position = "none")
+
+timevariation_per_gene
+
+```
+
+
+```{r}
+results_long1 <- results_long1 %>%
   filter(TimePoint != "Before-Injury")
 
-heatmap_mat <- results_long %>%
+heatmap_mat <- results_long1 %>%
   select(Gene, TimePoint, log2FC) %>%
   pivot_wider(names_from = TimePoint, values_from = log2FC) %>%
   column_to_rownames("Gene") %>%
@@ -132,4 +201,172 @@ heatmap_time <- Heatmap(
 ```
 
 
+Cell type and Time
+
+```{r}
+library(dplyr)
+
+celltype_1dpi <- read_excel("~/R/Data/DEG_Celltype_1dpi.xlsx")
+celltype_7dpi <- read_excel("~/R/Data/DEG_Celltype_7dpi.xlsx")
+celltype_21dpi <- read_excel("~/R/Data/DEG_Celltype_21dpi.xlsx")
+celltype_chronic <- read_excel("~/R/Data/DEG_Celltype_4-6wpi.xlsx")
+
+deg_celltype <- bind_rows(celltype_chronic, celltype_1dpi, celltype_21dpi, celltype_7dpi)
+
+deg_celltype <- deg_celltype %>%
+  filter(p_val_adj < 0.05)
+
+deg_celltype <- deg_celltype %>%
+  select(matches("Gene|avg_log2FC|time|celltype"))
+
+new_rows <- deg_celltype %>%
+  distinct(Gene, celltype) %>%
+  mutate(time = "Before Injury", avg_log2FC = 0)
+
+deg_celltype <- bind_rows(deg_celltype, new_rows) %>%
+  arrange(Gene, celltype, time)
+
+deg_celltype$time <- factor(deg_celltype$time, levels = c("Before Injury","1dpi", "7dpi", "21dpi", "4-6wpi"))
+
+interest_genes <- c("Tnr", "Tnn", "Lgals3", "Anxa3", "Fn1", "Serpina3n", "Adam23", "Tgm2", "C1qc", "C1qa", "C1qb", "Ctsb", "Ctsd", "Ctsz", "Timp1", "Timp3", "Timp2", "Serpinb1a", "Serpind1", "Vwa1", "Vit", "Itih3", "Htra1", "Serpinh1", "Lgi1", "Dcn", "Thbs2", "S100a6", "Pcolce", "Tgfb1", "Tnc", "Cxcl12", "Loxl1", "Matn2", "Postn", "Mmp14", "A2m", "Spock3", "Spock2", "Hapln2", "Hapln2", "Lama2", "Lama1", "Emilin1", "Tinagl1", "Bcan")
+
+deg_celltype <- deg_celltype %>%
+  filter(Gene %in% interest_genes)
+
+deg_celltype <- deg_celltype %>% filter(!is.na(avg_log2FC))
+
+top_upregulated <- deg_celltype %>%
+  filter(avg_log2FC > 0) %>%
+  group_by(celltype) %>%
+  top_n(5, avg_log2FC) %>%
+  ungroup()
+
+top_downregulated <- deg_celltype %>%
+  filter(avg_log2FC < 0) %>%
+  group_by(celltype) %>%
+  top_n(-5, avg_log2FC) %>%
+  ungroup()
+
+top_genes <- bind_rows(top_upregulated, top_downregulated)
+
+deg_celltype <- deg_celltype %>%
+  filter(Gene %in% top_genes$Gene)
+
+label_data <- deg_celltype %>%
+  group_by(Gene, celltype) %>%
+  slice_max(order_by = time, n = 1, with_ties = FALSE) %>%
+  ungroup()
+
+layout_celltype <- ggplot(deg_celltype, aes(x = time, y = avg_log2FC, group = Gene, color = Gene)) +
+  geom_line() +
+  geom_point() +
+  facet_grid(. ~ celltype, scales = "free_y") +
+  geom_text_repel(data = label_data, aes(label = Gene), size = 3, nudge_x = 0.3, direction = "y", segment.color = "grey50") +
+  theme_minimal() +
+  labs(x = "Time Post-Injury", y = "log2 Fold Change", title = "Expression Changes Over Time") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_color_viridis_d()
+
+layout_celltype
+
+```
+
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(ggrepel)
+
+celltype_1dpi <- read_excel("~/R/Data/DEG_Celltype_1dpi.xlsx")
+celltype_7dpi <- read_excel("~/R/Data/DEG_Celltype_7dpi.xlsx")
+celltype_21dpi <- read_excel("~/R/Data/DEG_Celltype_21dpi.xlsx")
+celltype_chronic <- read_excel("~/R/Data/DEG_Celltype_4-6wpi.xlsx")
+
+deg_celltype <- bind_rows(celltype_chronic, celltype_1dpi, celltype_21dpi, celltype_7dpi)
+deg_celltype <- deg_celltype %>% filter(p_val_adj < 0.05)
+deg_celltype <- deg_celltype %>% select(matches("Gene|avg_log2FC|time|celltype"))
+
+new_rows <- deg_celltype %>% distinct(Gene, celltype) %>% mutate(time = "Before Injury", avg_log2FC = 0)
+deg_celltype <- bind_rows(deg_celltype, new_rows) %>% arrange(Gene, celltype, time)
+deg_celltype$time <- factor(deg_celltype$time, levels = c("Before Injury","1dpi", "7dpi", "21dpi", "4-6wpi"))
+
+interest_genes <- c("Tnr", "Tnn", "Lgals3", "Anxa3", "Fn1", "Serpina3n", "Adam23", "Tgm2", "C1qc", "C1qa", "C1qb", "Ctsb", "Ctsd", "Ctsz", "Timp1", "Timp3", "Timp2", "Serpinb1a", "Serpind1", "Vwa1", "Vit", "Itih3", "Htra1", "Serpinh1", "Lgi1", "Dcn", "Thbs2", "S100a6", "Pcolce", "Tgfb1", "Tnc", "Cxcl12", "Loxl1", "Matn2", "Postn", "Mmp14", "A2m", "Spock3", "Spock2", "Hapln2", "Hapln2", "Lama2", "Lama1", "Emilin1", "Tinagl1")
+
+deg_celltype <- deg_celltype %>% filter(Gene %in% interest_genes)
+
+max_fc <- deg_celltype %>%
+  group_by(Gene, celltype) %>%
+  summarize(max_abs_fc = max(abs(avg_log2FC)), 
+  .groups = "drop")
+
+top_upregulated <- max_fc %>%
+  group_by(celltype) %>%
+  arrange(desc(max_abs_fc)) %>%
+  slice_head(n = 5) %>% 
+  ungroup()
+
+top_downregulated <- max_fc %>%
+  group_by(celltype) %>%
+  arrange(max_abs_fc) %>%
+  slice_head(n = 5) %>% 
+  ungroup()
+
+top_genes <- bind_rows(top_upregulated, top_downregulated) %>%
+  distinct(Gene, celltype) 
+
+deg_celltype_filtered <- deg_celltype %>%
+  semi_join(top_genes, by = c("Gene", "celltype"))
+
+label_data <- deg_celltype_filtered %>%
+  group_by(Gene, celltype) %>%
+  slice_max(order_by = time, n = 1, with_ties = FALSE) %>%
+  ungroup()
+
+layout_celltype <- ggplot(deg_celltype_filtered, aes(x = time, y = avg_log2FC, group = Gene, color = Gene)) +
+  geom_line() +
+  geom_point() +
+  facet_grid(. ~ celltype, scales = "free_y") +
+  geom_text_repel(data = label_data, aes(label = Gene), size = 3, nudge_x = 0.3, direction = "y", segment.color = "grey50") +
+  theme_minimal() +
+  labs(x = "Time Post-Injury", y = "log2 Fold Change", title = "Expression Changes Over Time") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_color_viridis_d()
+
+print(layout_celltype)
+```
+
+```{r}
+library(ggplot2)
+library(dplyr)
+
+celltypes <- unique(deg_celltype$celltype)
+plots <- list()
+
+for (ct in celltypes) {
+  deg_celltype_filtered <- deg_celltype %>%
+    filter(celltype == ct) %>%
+    mutate(direction = case_when(
+      avg_log2FC > 0 ~ "Up",
+      avg_log2FC < 0 ~ "Down",
+      TRUE ~ "Neutral"  
+    )) %>%
+    group_by(Gene) %>%
+    mutate(last_direction = last(direction)) %>% # 
+    ungroup()
+  
+  p <- ggplot(deg_celltype_filtered, aes(x = time, y = avg_log2FC, group = Gene)) +
+    geom_line(aes(color = last_direction), show.legend = FALSE) + 
+    geom_point(aes(color = direction), size = 3) + 
+    facet_wrap(~ Gene, scales = "free_y") +
+    labs(title = paste("Expression per Gene in", ct),
+         x = "Time Post-Injury", y = "log2 Fold Change") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    scale_color_manual(values = c("Up" = "forestgreen", "Down" = "firebrick", "Neutral" = "gray80"))
+  
+  plots[[ct]] <- p
+}
+
+
+```
 
