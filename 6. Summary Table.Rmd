@@ -1,0 +1,282 @@
+---
+title: "Summary Table"
+output: html_document
+date: "2025-05-21"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(dplyr)
+library(tidyverse)
+library(readxl)
+library(circlize)
+library(gridtext)
+library(ComplexHeatmap)
+library(openxlsx)
+```
+
+
+```{r}
+omics <- readRDS("~/R/Downloads/Data_Omics.rds")
+genes <- readRDS("~/R/Downloads/Genes_Correlation.rds")
+go_chronic <- readRDS("~/R/Downloads/Go_Chronic.rds")
+go_acute <- readRDS("~/R/Downloads/Go_Acute.rds")
+```
+
+```{r}
+omics <- omics %>%
+  filter(Gene %in% genes)
+
+go_chronic <-  go_chronic[, colnames(go_chronic) %in% genes, drop = FALSE]
+go_acute <-  go_acute[, colnames(go_acute) %in% genes, drop = FALSE]
+
+```
+
+```{r}
+# Map gene symbols to ENTREZ IDs
+gene_entrez <- mapIds(org.Mm.eg.db,
+                      keys = genes,
+                      keytype = "SYMBOL",
+                      column = "ENTREZID")
+gene_entrez <- na.omit(gene_entrez)
+
+# Perform GO enrichment
+go_res <- enrichGO(
+    gene = gene_entrez,
+    OrgDb = org.Mm.eg.db,
+    keyType = "ENTREZID",
+    ont = "BP")
+
+# Filter the GO terms from the enrichGO object directly
+pattern <- "nervous system|nervous system process|regulation of apoptotic signaling pathway|axogenesis|neuron|axon|spinal|synapse|chronic|long-term|acute|innate|plasticity|Wnt|Notch|phosphatidylinositol|MAPK|NF-kappaB|BMP|STAT|SMAD|toll-like|Rho"
+filtered_go_res <- go_res
+filtered_go_res@result <- filtered_go_res@result %>%
+  dplyr::filter(stringr::str_detect(Description, regex(pattern, ignore_case = TRUE)))
+
+# Tidy table
+gene_go <- filtered_go_res@result %>%
+  as.data.frame() %>%
+  separate_rows(geneID, sep = "/") %>%
+  dplyr::select(gene = geneID, go_term = Description, pvalue) %>%
+  mutate(gene = mapIds(org.Mm.eg.db,
+                       keys = gene,
+                       keytype = "ENTREZID",
+                       column = "SYMBOL"))
+gene_go <- gene_go[!grepl("substrate", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("prostate", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("leukocyte", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("postsynaptic", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("homotypic", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("cell-matrix", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("neuron projection extension involved in neuron projection guidance", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("protein localization to synapse", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("protein localization to postsynapse", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("spinal cord patterning", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("ventral spinal cord interneuron fate commitment", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("dopaminergic neuron differentiation", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("peripheral nervous system development", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("spinal cord dorsal/ventral patterning", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("prostatic bud formation", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("receptor localization to synapse", gene_go$go_term), ]
+
+counts_go <- table(gene_go$gene)
+```
+
+
+```{r}
+
+omics_wide <- omics %>%
+  dplyr::filter(Condition != "Before injury") %>%
+  mutate(Condition = gsub(" ", "", Condition),
+         column_id = paste(Type, Condition, sep = "_")) %>%
+  dplyr::select(Gene, column_id, log2FC) %>%
+  pivot_wider(names_from = column_id, values_from = log2FC) %>%
+  as.data.frame()
+
+omics_wide$`Transcriptomics_Before-Injury` <- NULL
+omics_wide$`Proteomics_Before-Injury` <- NULL
+
+go_terms_por_gen_acute <- colSums(go_acute)
+
+df_go_counts_acute <- data.frame(
+  Gene = names(counts_go),
+  GO_Count = as.numeric(counts_go),
+  row.names = NULL
+)
+omics_wide <- merge(omics_wide, df_go_counts_acute, by = "Gene", all.x = TRUE)
+rownames(omics_wide) <- omics_wide$Gene
+omics_wide$Gene <- NULL
+
+summary_matrix <- as.matrix(omics_wide)
+
+```
+
+```{r}
+
+matrix_data <- as.matrix(summary_matrix[, c("Transcriptomics_7dpi", "Transcriptomics_4-6wpi", "Proteomics_7dpi", "Proteomics_4-6wpi")])
+rownames(matrix_data) <- rownames(summary_matrix)
+
+col_labels <- c(
+  "7 dpi", 
+  "4-6 wpi", 
+  "7 dpi", 
+  "4-6 wpi"
+)
+
+col_fun <- colorRamp2(c(-2, 0, 5), c("steelblue4", "white", "tomato3"))
+
+top_group_anno <- HeatmapAnnotation(
+  group = anno_text(
+    c("                                     Transcriptomics", "", "                                  Proteomics", ""),  
+    gp = gpar(fontsize = 10),
+    just = c("center", "up"),
+    rot = 0 
+  ),
+  which = "column",
+  show_annotation_name = FALSE
+)
+
+hm_main <- Heatmap(
+  matrix_data,
+  name = "Expression",
+  col = col_fun,
+  rect_gp = gpar(col = "white", lwd = 3),
+  clustering_method_columns = "ward.D2",
+  clustering_distance_columns = "euclidean",
+  cluster_rows = FALSE,
+  cluster_columns = FALSE,
+  show_row_dend = FALSE,
+  row_names_side = "left",
+  row_names_gp = gpar(fontsize = 9),
+  column_labels = col_labels,
+  column_names_centered = T,
+  column_names_gp = gpar(fontsize = 9),
+  column_title_gp = gpar(fontsize = 15, fontface = "bold"),
+ column_title = "            Summary Table of Final Biomarkers \n",
+  heatmap_legend_param = list(
+    title = "Log2FC",
+    at = c(-2, 0, 2, 4),
+    labels = c("-2", "0", "2", "4")
+  ), top_annotation = top_group_anno
+)
+
+summary_matrix <- as.data.frame(summary_matrix)
+go_count <- summary_matrix$GO_Count
+names(go_count) <- rownames(summary_matrix)
+
+col_fun_go <- colorRamp2(c(min(go_count), max(go_count)), c("cornsilk", "cornsilk4"))
+
+hm_go <- Heatmap(
+  matrix(go_count, ncol = 1, dimnames = list(names(go_count), "GO Count")),
+  name = "GO Count",
+  rect_gp = gpar(col = "white", lwd = 2),
+  col = col_fun_go,
+  width = unit(0.5, "cm"),
+  show_row_names = FALSE,
+  cluster_rows = FALSE
+)
+
+png("~/R/Figures2/Summary_Table.png", width = 3500, height = 3500, res = 600)
+draw(hm_main + hm_go)
+dev.off()
+
+for (i in rownames(matrix_data)) {
+  cat(i, "\n")
+}
+
+```
+
+```{r}
+
+# Load required packages
+library(httr)
+library(jsonlite)
+library(dplyr)
+
+query <- '{
+  genes(names: ["LGALS3", "TNC", "THBS2", "POSTN", "SERPINA3", "SRPX2", "VIT", "C1QB", "C1QC", "HAPLN2"]) {
+    nodes {
+      name
+      interactions {
+        drug {
+          name
+          conceptId
+        }
+        interactionScore
+        interactionTypes {
+          type
+          directionality
+        }
+        interactionAttributes {
+          name
+          value
+        }
+        publications {
+          pmid
+        }
+        sources {
+          sourceDbName
+        }
+      }
+    }
+  }
+}'
+
+
+url <- "https://dgidb.org/api/graphql"
+
+res <- POST(
+  url,
+  body = list(query = query),
+  encode = "json",
+  content_type_json()
+)
+
+# Verifica si la respuesta es correcta
+if (status_code(res) == 200) {
+  data <- content(res, as = "parsed", simplifyVector = TRUE)
+  print(data)
+} else {
+  print(paste("Error:", status_code(res)))
+}
+
+order_genes = data[["data"]][["genes"]][["nodes"]][["name"]]
+
+info1 <- data[["data"]][["genes"]][["nodes"]][["interactions"]][[1]]
+info1$Gene <- "Postn"
+
+info2 <- data[["data"]][["genes"]][["nodes"]][["interactions"]][[2]]
+
+info3 <- data[["data"]][["genes"]][["nodes"]][["interactions"]][[3]]
+info3$Gene <- "C1qc"
+  
+info4 <- data[["data"]][["genes"]][["nodes"]][["interactions"]][[4]]
+info5 <- data[["data"]][["genes"]][["nodes"]][["interactions"]][[5]]
+info6 <- data[["data"]][["genes"]][["nodes"]][["interactions"]][[6]]
+
+
+info7 <- data[["data"]][["genes"]][["nodes"]][["interactions"]][[7]]
+info7$Gene <- "Thbs2"
+
+info8 <- data[["data"]][["genes"]][["nodes"]][["interactions"]][[8]]
+info8$Gene <- "Tnc"
+
+info9 <- data[["data"]][["genes"]][["nodes"]][["interactions"]][[9]]
+info9$Gene <- "Lgals3"
+
+info10 <- data[["data"]][["genes"]][["nodes"]][["interactions"]][[10]]
+info10$Gene <- "Serpina3"
+
+drug_results <- bind_rows(info1, info3, info7, info8, info9, info10)
+
+drug_results_expanded <- drug_results %>%
+  unnest_wider(interactionTypes, names_sep = "_") %>%
+  unnest_wider(interactionAttributes, names_sep = "_") %>%
+  unnest_wider(publications, names_sep = "_") %>%
+  unnest_wider(sources, names_sep = "_")
+
+```
+
