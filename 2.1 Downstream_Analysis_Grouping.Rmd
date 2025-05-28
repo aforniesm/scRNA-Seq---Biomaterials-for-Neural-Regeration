@@ -1,0 +1,1074 @@
+---
+title: "Downstream_Analysis_Acute"
+output: html_document
+date: "2025-05-05"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F)
+```
+
+```{r}
+library(Seurat)
+library(dplyr)
+library(tidyverse)
+library(readxl)
+library(AnnotationDbi)
+library(org.Mm.eg.db)
+library(clusterProfiler)
+library(circlize)
+library(gridtext)
+library(ComplexHeatmap)
+library(openxlsx)
+library(enrichplot)
+```
+
+
+```{r}
+DEG_1dpi <- read_excel("~/R/Downloads/DEG_FirstDay.xlsx")
+DEG_7dpi <- read_excel("~/R/Downloads/DEG_Acute.xlsx")
+DEG_21dpi <- read_excel("~/R/Downloads/DEG_21dpi.xlsx")
+DEG_1mpi <- read_excel("~/R/Downloads/DEG_Sub-Chronic.xlsx")
+seurat_integrated_ME <- readRDS("~/R/Downloads/Seurat_Integrated_ME.rds")
+```
+
+Time: Acute - 7 dpi
+
+```{r}
+DEG_7dpi_filtered <- DEG_7dpi %>%
+  filter(p_val_adj < 0.05 & (avg_log2FC > 0.585 | avg_log2FC < -0.585))
+
+relevant_genes_7dpi <- DEG_7dpi_filtered$Gene
+
+# Map gene symbols to ENTREZ IDs
+gene_entrez <- mapIds(org.Mm.eg.db,
+                      keys = relevant_genes_7dpi,
+                      keytype = "SYMBOL",
+                      column = "ENTREZID")
+gene_entrez <- na.omit(gene_entrez)
+
+# Perform GO enrichment
+go_res <- enrichGO(
+    gene = gene_entrez,
+    OrgDb = org.Mm.eg.db,
+    keyType = "ENTREZID",
+    ont = "BP")
+
+barplot(go_res, showCategory = 20)
+
+# Filter the GO terms from the enrichGO object directly
+pattern <- "nervous system development|nervous system process|regulation of apoptotic signaling pathway|neuron|neurogenesis|axon|axogenesis|spinal|synapse|acute|innate|plasticity|regulation of autophagy|regulation of inflammatory response"
+filtered_go_res <- go_res
+filtered_go_res@result <- filtered_go_res@result %>%
+  dplyr::filter(stringr::str_detect(Description, regex(pattern, ignore_case = TRUE)))
+
+# Tidy table
+gene_go <- filtered_go_res@result %>%
+  as.data.frame() %>%
+  separate_rows(geneID, sep = "/") %>%
+  dplyr::select(gene = geneID, go_term = Description, p.adjust) %>%
+  mutate(gene = mapIds(org.Mm.eg.db,
+                       keys = gene,
+                       keytype = "ENTREZID",
+                       column = "SYMBOL"))
+gene_go <- gene_go[!grepl("substrate", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("prostate", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("leukocyte", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("postsynaptic", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("homotypic", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("cell-matrix", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("neuron projection extension involved in neuron projection guidance", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("protein localization to synapse", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("protein localization to postsynapse", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("spinal cord patterning", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("ventral spinal cord interneuron fate commitment", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("dopaminergic neuron differentiation", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("peripheral nervous system development", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("spinal cord dorsal/ventral patterning", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("prostatic bud formation", gene_go$go_term), ]
+
+# gene_go <- gene_go %>%  filter(p)
+ 
+genes_sci <- unique(gene_go$gene)
+
+DEG_7dpi_filtered <- DEG_7dpi_filtered %>%
+  filter(Gene %in% genes_sci)
+
+DEG_7dpi_filtered$Regulation <- ifelse(DEG_7dpi_filtered$avg_log2FC > 0, "Up", "Down")
+
+DEG_7dpi_filtered$FC_Percentage_Cell_Expression <- (DEG_7dpi_filtered$pct.1 / DEG_7dpi_filtered$pct.2) - 1
+
+DEG_7dpi_filtered <- DEG_7dpi_filtered[order(DEG_7dpi_filtered$avg_log2FC, decreasing = TRUE), ]
+
+up <- head(DEG_7dpi_filtered, 10)
+down <- tail(DEG_7dpi_filtered, 10)
+down <- down %>%
+  filter(avg_log2FC < 0)
+
+DEG_7dpi_filtered <-  bind_rows(up, down)  
+
+DEG_7dpi_filtered$Gene <- factor(DEG_7dpi_filtered$Gene, levels = DEG_7dpi_filtered$Gene[order(DEG_7dpi_filtered$avg_log2FC)])
+
+DEG_7dpi_plot <- ggplot(DEG_7dpi_filtered, aes(x = Gene, y = avg_log2FC, fill = FC_Percentage_Cell_Expression)) +
+  geom_bar(stat = "identity") +
+  scale_fill_gradient(low = "steelblue", high = "firebrick", limits = c(-0.5, 0.5),
+    labels = scales::label_number(accuracy = 0.1)) +
+  labs(
+    x = "Gene",
+    y = "Average Log2FC",
+    fill = "Ratio of Cells Expressing the Gene"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.title = element_text(size = 14), 
+        axis.text.x = element_text(angle = 90, hjust = 1, size = 10, vjust = 0.5),
+        legend.position = "bottom")
+DEG_7dpi_plot
+
+ggsave("~/R/Figures2/DifferentialExpression_Acute.png", dpi = 1080, width = 11, height = 8)
+
+
+``` 
+
+Enrichment analysis
+
+```{r}
+regulation <- DEG_7dpi_filtered [, c("Gene", "Regulation")]
+gene_regulation_status <- regulation$Regulation
+names(gene_regulation_status) <- regulation$Gene
+
+relevant_genes_7dpi <- as.vector(DEG_7dpi_filtered$Gene)
+
+# Map gene symbols to ENTREZ IDs
+gene_entrez <- mapIds(org.Mm.eg.db,
+                      keys = relevant_genes_7dpi,
+                      keytype = "SYMBOL",
+                      column = "ENTREZID")
+gene_entrez <- na.omit(gene_entrez)
+
+# Perform GO enrichment
+go_res <- enrichGO(
+    gene = gene_entrez,
+    OrgDb = org.Mm.eg.db,
+    keyType = "ENTREZID",
+    ont = "BP")
+
+# Filter the GO terms from the enrichGO object directly
+pattern <- "nervous system development|nervous system process|regulation of apoptotic signaling pathway|neuron|neurogenesis|axon|axogenesis|spinal|synapse|acute|innate|plasticity|regulation of autophagy|regulation of inflammatory response|Wnt|Notch|phosphatidylinositol|MAPK|NF-kappaB|BMP|STAT|SMAD|toll-like|Rho"
+filtered_go_res <- go_res
+filtered_go_res@result <- filtered_go_res@result %>%
+  dplyr::filter(stringr::str_detect(Description, regex(pattern, ignore_case = TRUE)))
+
+# Tidy table
+gene_go <- filtered_go_res@result %>%
+  as.data.frame() %>%
+  separate_rows(geneID, sep = "/") %>%
+  dplyr::select(gene = geneID, go_term = Description, p.adjust) %>%
+  mutate(gene = mapIds(org.Mm.eg.db,
+                       keys = gene,
+                       keytype = "ENTREZID",
+                       column = "SYMBOL"))
+gene_go <- gene_go[!grepl("substrate", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("prostate", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("leukocyte", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("postsynaptic", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("homotypic", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("cell-matrix", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("neuron projection extension involved in neuron projection guidance", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("protein localization to synapse", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("protein localization to postsynapse", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("spinal cord patterning", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("ventral spinal cord interneuron fate commitment", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("dopaminergic neuron differentiation", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("peripheral nervous system development", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("spinal cord dorsal/ventral patterning", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("prostatic bud formation", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("receptor localization to synapse", gene_go$go_term), ]
+
+# Significance 
+gene_go <- gene_go %>%
+  filter(p.adjust < 0.1)
+
+go_categories <- list(
+  `Neuronal development and specification` = c(
+    "neurogenesis", "neuron differentiation", "fate specification", "fate commitment",
+    "maturation", "neuron migration", "cell-cell adhesion", "neuron remodeling"
+  ),
+  `Axonal growth and regeneration` = c(
+    "axon", "axonogenesis", "guidance", "regeneration", "projection extension",
+    "projection regeneration", "ensheathment", "arborization"
+  ),
+  `Synapse development and plasticity` = c(
+    "synapse", "synaptic", "pruning", "assembly", "organization", "plasticity", "postsynapse"
+  ),
+  `Spinal cord development` = c(
+    "spinal cord", "ventral spinal cord", "motor neuron", "cell differentiation in spinal cord"
+  ),
+  `Nervous system patterning and regulation` = c(
+    "nervous system development", "nervous system process",
+    "regulation of nervous system", "neuron projection development"
+  ),
+  `Immune and inflammatory processes` = c(
+    "immune", "inflammatory", "acute-phase", "antigenic", "immunological",
+    "innate immune", "immunological synapse"
+  ),
+  `Apoptosis and neuronal survival` = c(
+    "apoptotic", "cell survival"
+  ),
+  `Autophagy and cellular stress responses` = c(
+    "autophagy", "stress"
+  ),
+  `TGF-B Signaling` = c(
+    "cellular response to transforming growth factor beta stimulus",
+    "response to transforming growth factor beta",
+    "transforming growth factor beta receptor signaling pathway",
+    "transforming growth factor beta receptor superfamily signaling pathway",
+    "regulation of transforming growth factor beta receptor signaling pathway",
+    "negative regulation of transforming growth factor beta receptor signaling pathway",
+    "positive regulation of transforming growth factor beta receptor signaling pathway",
+    "regulation of cellular response to transforming growth factor beta stimulus",
+    "positive regulation of cellular response to transforming growth factor beta stimulus",
+    "transforming growth factor beta1 production",
+    "transforming growth factor beta production",
+    "regulation of transforming growth factor beta1 production",
+    "positive regulation of transforming growth factor beta production",
+    "regulation of transforming growth factor beta production"
+  ),
+  `Notch Signaling` = c(
+    "Notch signaling pathway",
+    "regulation of Notch signaling pathway",
+    "negative regulation of Notch signaling pathway"
+  ),
+  `PI3K-AKT Signaling` = c(
+    "phosphatidylinositol 3-kinase/protein kinase B signal transduction",
+    "regulation of phosphatidylinositol 3-kinase/protein kinase B signal transduction",
+    "positive regulation of phosphatidylinositol 3-kinase/protein kinase B signal transduction"
+  ),
+  `NF-kB Signaling` = c(
+    "non-canonical NF-kappaB signal transduction",
+    "regulation of non-canonical NF-kappaB signal transduction",
+    "positive regulation of non-canonical NF-kappaB signal transduction",
+    "canonical NF-kappaB signal transduction",
+    "regulation of canonical NF-kappaB signal transduction",
+    "positive regulation of canonical NF-kappaB signal transduction"
+  ),
+  `Wnt Signaling` = c(
+    "Wnt signaling pathway",
+    "canonical Wnt signaling pathway",
+    "regulation of canonical Wnt signaling pathway",
+    "positive regulation of canonical Wnt signaling pathway",
+    "regulation of Wnt signaling pathway",
+    "positive regulation of Wnt signaling pathway"
+  ),
+  `MAPK Signaling` = c(
+    "positive regulation of stress-activated MAPK cascade",
+    "stress-activated MAPK cascade",
+    "regulation of stress-activated MAPK cascade"
+  ),
+  `Rho Signaling` = c(
+    "Rho protein signal transduction",
+    "positive regulation of Rho protein signal transduction", 
+    "regulation of Rho protein signal transduction"
+  ), 
+  `SMAD Signaling` = c(
+    "SMAD protein signal transduction",
+    "regulation of SMAD protein signal transduction", 
+    "negative regulation of SMAD protein signal transduction"
+  ),
+  `STAT Signaling` = c("cell surface receptor signaling pathway via STAT"),
+  `BMP Signaling` = c(
+    "negative regulation of BMP signaling pathway",
+    "regulation of BMP signaling pathway", 
+    "BMP signaling pathway", "response to BMP", "cellular response to BMP stimulus"
+  ),
+  `TLR Signaling` = c(
+    "toll-like receptor signaling pathway",
+    "regulation of toll-like receptor signaling pathway"
+  )
+)
+
+# Categories
+gene_go <- gene_go %>%
+  mutate(
+    go_term_grouped = sapply(go_term, function(term) {
+      match <- names(go_categories)[sapply(go_categories, function(keywords_or_terms) {
+        any(sapply(keywords_or_terms, function(k) str_detect(term, fixed(k, ignore_case = TRUE))))
+      })]
+      if (length(match) > 0) match[1] else term
+    })
+  ) %>%
+  group_by(go_term_grouped) %>%
+  mutate(mean_pvalue_group = mean(p.adjust, na.rm = TRUE)) %>%
+  ungroup()
+
+gene_go <- gene_go %>%
+  group_by(gene, go_term_grouped) %>%
+  mutate(category_count_per_gene = n()) %>%
+  ungroup()
+
+```
+
+
+```{r}
+# 6. Matrix
+gene_go$presence <- 1
+
+gene_go_clean <- gene_go %>%
+  distinct(go_term_grouped, gene, .keep_all = TRUE)
+
+go_signaling <- gene_go_clean %>% 
+  filter(str_detect(go_term_grouped, "Signaling"))
+
+go_non_signaling <- gene_go_clean %>% 
+  filter(!str_detect(go_term_grouped, "Signaling"))
+
+binary_matrix_non_signaling <- go_non_signaling %>%
+  select(go_term_grouped, gene, category_count_per_gene) %>%
+  pivot_wider(names_from = gene, values_from = category_count_per_gene, values_fill = list(category_count_per_gene = 0))
+
+final_matrix_non_signaling <- go_non_signaling %>%
+  distinct(go_term_grouped, mean_pvalue_group) %>%
+  left_join(binary_matrix_non_signaling, by = "go_term_grouped") %>%
+  rowwise() %>%
+  mutate(total_count = sum(c_across(where(is.numeric))[-1])) %>%
+  ungroup()
+
+cols_to_check <- final_matrix_non_signaling %>%
+  select(-go_term_grouped, -mean_pvalue_group, -total_count)
+
+cols_with_values <- names(cols_to_check)[colSums(cols_to_check) > 0]
+
+final_matrix_non_signaling <- final_matrix_non_signaling %>%
+  select(go_term_grouped, mean_pvalue_group, all_of(cols_with_values), total_count)
+
+# Signaling only for the selected ones
+binary_matrix_signaling <- go_signaling %>%
+  select(go_term_grouped, gene, presence) %>%
+  pivot_wider(names_from = gene, values_from = presence, values_fill = list(presence = 0))
+
+final_matrix_signaling <- go_signaling %>%
+  distinct(go_term_grouped, mean_pvalue_group) %>%
+  left_join(binary_matrix_signaling, by = "go_term_grouped") %>%
+  rowwise() %>%
+  mutate(total_count = sum(c_across(where(is.numeric))[-1])) %>%
+  ungroup()
+
+final_matrix_signaling <- final_matrix_signaling[, colnames(final_matrix_signaling) %in% colnames(final_matrix_non_signaling)]
+
+final_matrix_signaling$total_count <- NULL
+cols_to_sum <- setdiff(
+  colnames(final_matrix_signaling)[sapply(final_matrix_signaling, is.numeric)],
+  c("mean_pvalue_group", "go_term_grouped")
+)
+final_matrix_signaling$total_count <- rowSums(final_matrix_signaling[, cols_to_sum])
+
+final_matrix_signaling <- final_matrix_signaling[final_matrix_signaling$total_count != 0, ]
+
+
+# For signaling terms
+matrix_binary_signaling <- as.matrix(final_matrix_signaling[, !(colnames(final_matrix_signaling) %in% c("go_term_grouped", "mean_pvalue_group", "total_count"))])
+rownames(matrix_binary_signaling) <- final_matrix_signaling$go_term_grouped
+
+matrix_counts_signaling <- final_matrix_signaling$total_count
+names(matrix_counts_signaling) <- final_matrix_signaling$go_term_grouped
+
+matrix_pval_signaling <- -log10(final_matrix_signaling$mean_pvalue_group)
+names(matrix_pval_signaling) <- final_matrix_signaling$go_term_grouped
+
+# For non-signaling terms
+matrix_binary_non_signaling <- as.matrix(final_matrix_non_signaling[, !(colnames(final_matrix_non_signaling) %in% c("go_term_grouped", "mean_pvalue_group", "total_count"))])
+rownames(matrix_binary_non_signaling) <- final_matrix_non_signaling$go_term_grouped
+
+matrix_counts_non_signaling <- final_matrix_non_signaling$total_count
+names(matrix_counts_non_signaling) <- final_matrix_non_signaling$go_term_grouped
+
+matrix_pval_non_signaling <- -log10(final_matrix_non_signaling$mean_pvalue_group)
+names(matrix_pval_non_signaling) <- final_matrix_non_signaling$go_term_grouped
+
+col_fun <- colorRamp2(
+  c(0, 1, 3, 6, 9),
+  c("#ebebf3", "#d1d3ea", "#b0b3d9", "#888cc2", "#666ca8"))
+col_fun2 <- colorRamp2(c(min(matrix_counts_non_signaling), max(matrix_counts_non_signaling)), c("#FAEBD7", "#8B8378"))
+col_fun3 <- colorRamp2(c(min(matrix_pval_non_signaling), max(matrix_pval_non_signaling)), c("cadetblue", "tomato"))
+
+col_fun_  <- colorRamp2(c(0,1), c("#ebebf3", "#666ca8"))
+col_fun2_ <- colorRamp2(c(0,1), c("#FAEBD7", "#8B8378"))
+col_fun3_ <- colorRamp2(c(min(matrix_pval_signaling), max(matrix_pval_signaling)), c("cadetblue", "tomato"))
+```
+
+Plots
+
+```{r}
+gene_regulation_status <- gene_regulation_status[colnames(matrix_binary_signaling)]
+
+regulation_colors <- c("Up" = "red", "Down" = "blue")
+
+column_annotation <- HeatmapAnnotation(
+    "Regulation"= anno_simple(
+        gene_regulation_status, 
+        col = regulation_colors,
+        gp = gpar(col = "white", lwd = 1.5)),
+    annotation_name_side = "left",
+    annotation_name_gp = gpar(fontsize = 9))
+
+
+hm_binary_signaling <- Heatmap(matrix_binary_signaling,
+                               name = "Status",
+                               col = col_fun_,
+                               rect_gp = gpar(col = "white", lwd = 2),
+                               clustering_method_columns = "ward.D2",
+                               clustering_distance_columns = "euclidean",
+                               cluster_rows = FALSE,
+                               show_row_dend = FALSE,
+                               show_column_dend = FALSE,
+                               row_names_gp = gpar(fontsize = 9),
+                               row_names_side = "left",
+                               column_names_rot = 90,
+                               column_names_gp = gpar(fontsize = 9),
+                               heatmap_legend_param = list(title = "Status", at = c(0, 1),
+                                                           labels = c("Absent", "Present")),
+                               column_title = " ",
+                               column_title_gp = gpar(fontsize = 12),
+                               bottom_annotation = column_annotation)
+
+# Heatmap for signaling terms - Count
+hm_count_signaling <- Heatmap(matrix_counts_signaling,
+                              rect_gp = gpar(col = "white", lwd = 2),
+                              name = "Count",
+                              col = col_fun2_,
+                              cluster_rows = FALSE,
+                              cluster_columns = FALSE,
+                              show_row_names = FALSE,
+                              width = unit(1, "cm"),
+                              column_title = " ",
+                              column_names_rot = 90,
+                              column_names_gp = gpar(fontsize = 8),
+                              column_title_gp = gpar(fontsize = 8))
+
+# Heatmap for signaling terms - P-value
+hm_pval_signaling <- Heatmap(matrix_pval_signaling,
+                             rect_gp = gpar(col = "white", lwd = 2),
+                             name = "-log10 P-value",
+                             col = col_fun3_,
+                             cluster_rows = FALSE,
+                             cluster_columns = FALSE,
+                             show_row_names = FALSE,
+                             width = unit(1, "cm"),
+                             column_title = " ",
+                             column_names_rot = 90,
+                             column_names_gp = gpar(fontsize = 8),
+                             column_title_gp = gpar(fontsize = 8))
+
+gene_regulation_status2 <- gene_regulation_status[colnames(matrix_binary_non_signaling)]
+
+regulation_colors <- c("Up" = "red", "Down" = "blue")
+
+column_annotation <- HeatmapAnnotation(
+    "Regulation"= anno_simple(
+        gene_regulation_status2, 
+        col = regulation_colors,
+        gp = gpar(col = "white", lwd = 1.5)),
+    annotation_name_side = "left",
+    annotation_name_gp = gpar(fontsize = 6))
+
+
+# Heatmap for non-signaling terms - Status (Presence/Absence)
+hm_binary_non_signaling <- Heatmap(matrix_binary_non_signaling,
+                               name = "Status",
+                               col = col_fun,
+                               rect_gp = gpar(col = "white", lwd = 2),
+                               clustering_method_columns = "ward.D2",
+                               clustering_distance_columns = "euclidean",
+                               cluster_rows = FALSE,
+                               show_row_dend = FALSE,
+                               show_column_dend = FALSE,
+                               row_names_gp = gpar(fontsize = 7),
+                               row_names_side = "left",
+                               column_names_rot = 90,
+                               column_names_gp = gpar(fontsize = 7),
+                               heatmap_legend_param = list(title = "GO Terms per Category", at = c(0, 9),
+                                                           labels = c("0", "9")),
+                               column_title = " ",
+                               column_title_gp = gpar(fontsize = 12),
+                               bottom_annotation = column_annotation)
+
+# Heatmap for non-signaling terms - Count
+hm_count_non_signaling <- Heatmap(matrix_counts_non_signaling,
+                                  rect_gp = gpar(col = "white", lwd = 2),
+                                  name = "Count",
+                                  col = col_fun2,
+                                  cluster_rows = FALSE,
+                                  cluster_columns = FALSE,
+                                  show_row_names = FALSE,
+                                  width = unit(1, "cm"),
+                                  column_title = " ",
+                                  column_names_rot = 90,
+                                  column_names_gp = gpar(fontsize = 6),
+                                  column_title_gp = gpar(fontsize = 6))
+
+# Heatmap for non-signaling terms - P-value
+hm_pval_non_signaling <- Heatmap(matrix_pval_non_signaling,
+                                 rect_gp = gpar(col = "white", lwd = 2),
+                                 name = "-log10 P-value",
+                                 col = col_fun3,
+                                 cluster_rows = FALSE,
+                                 cluster_columns = FALSE,
+                                 show_row_names = FALSE,
+                                 width = unit(1, "cm"),
+                                 column_title = " ",
+                                 column_names_rot = 90,
+                                 column_names_gp = gpar(fontsize = 6),
+                                 column_title_gp = gpar(fontsize = 6))
+
+regulation_legend <- Legend(
+  title = "Regulation",
+  at = c("Up", "Down"),
+  labels = c("Upregulated", "Downregulated"),
+  legend_gp = gpar(fill = c("Up" = "red", "Down" = "blue"))
+)
+
+draw(hm_binary_non_signaling + hm_count_non_signaling + hm_pval_non_signaling, annotation_legend_list = list(regulation_legend), annotation_legend_side = "right")
+draw(hm_binary_signaling + hm_count_signaling + hm_pval_signaling, annotation_legend_list = list(regulation_legend), annotation_legend_side = "right")
+
+# Signaling
+png("~/R/Figures2/Enrichment_Signaling_7dpi.png", width = 4500, height = 3000, res = 550)
+draw(hm_binary_signaling + hm_count_signaling + hm_pval_signaling, annotation_legend_list = list(regulation_legend), annotation_legend_side = "right")
+dev.off()
+
+# Non-signaling
+png("~/R/Figures2/Enrichment_NonSignaling_7dpi_Grouped.png", width = 5000, height = 2500, res = 500)
+draw(hm_binary_non_signaling + hm_count_non_signaling + hm_pval_non_signaling, annotation_legend_list = list(regulation_legend), annotation_legend_side = "right")
+dev.off()
+
+# Genes with GO-Terms SCI-Associated
+genes_acute <- unique(c(colnames(matrix_binary_non_signaling), colnames(matrix_binary_signaling)))
+
+saveRDS(matrix_binary_non_signaling, file = "~/R/Downloads/Go_Acute.rds")
+
+```
+
+Time: Chronic - 4-6 wpi
+
+```{r}
+DEG_chronic_filtered <- DEG_1mpi %>%
+  filter(p_val_adj < 0.05 & (avg_log2FC > 0.585 | avg_log2FC < -0.585))
+
+relevant_genes_chronic <- DEG_chronic_filtered$Gene
+
+# Map gene symbols to ENTREZ IDs
+gene_entrez <- mapIds(org.Mm.eg.db,
+                      keys = relevant_genes_chronic,
+                      keytype = "SYMBOL",
+                      column = "ENTREZID")
+gene_entrez <- na.omit(gene_entrez)
+
+# Perform GO enrichment
+go_res <- enrichGO(
+    gene = gene_entrez,
+    OrgDb = org.Mm.eg.db,
+    keyType = "ENTREZID",
+    ont = "BP")
+
+barplot(go_res, showCategory = 20)
+
+
+# Filter the GO terms from the enrichGO object directly
+pattern <- "nervous system|nervous system process|regulation of apoptotic signaling pathway|axogenesis|neuron|neurogenesis|axon|spinal|synapse|chronic|long-term|plasticity|regulation of autophagy|regulation of inflammatory response"
+
+filtered_go_res <- go_res
+filtered_go_res@result <- filtered_go_res@result %>%
+  dplyr::filter(stringr::str_detect(Description, regex(pattern, ignore_case = TRUE)))
+
+# Tidy table
+gene_go <- filtered_go_res@result %>%
+  as.data.frame() %>%
+  separate_rows(geneID, sep = "/") %>%
+  dplyr::select(gene = geneID, go_term = Description, p.adjust) %>%
+  mutate(gene = mapIds(org.Mm.eg.db,
+                       keys = gene,
+                       keytype = "ENTREZID",
+                       column = "SYMBOL"))
+gene_go <- gene_go[!grepl("substrate", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("prostate", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("leukocyte", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("postsynaptic", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("homotypic", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("cell-matrix", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("neuron projection extension involved in neuron projection guidance", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("protein localization to synapse", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("protein localization to postsynapse", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("spinal cord patterning", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("ventral spinal cord interneuron fate commitment", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("dopaminergic neuron differentiation", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("peripheral nervous system development", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("spinal cord dorsal/ventral patterning", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("prostatic bud formation", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("receptor localization to synapse", gene_go$go_term), ]
+
+genes_sci <- unique(gene_go$gene)
+
+DEG_chronic_filtered <- DEG_chronic_filtered %>%
+  filter(Gene %in% genes_sci)
+
+DEG_chronic_filtered$Regulation <- ifelse(DEG_chronic_filtered$avg_log2FC > 0, "Up", "Down")
+
+DEG_chronic_filtered$FC_Percentage_Cell_Expression <- (DEG_chronic_filtered$pct.1 / DEG_chronic_filtered$pct.2) - 1
+
+DEG_chronic_filtered <- DEG_chronic_filtered[order(DEG_chronic_filtered$avg_log2FC, decreasing = TRUE), ]
+
+up <- head(DEG_chronic_filtered, 10)
+down <- tail(DEG_chronic_filtered, 10)
+down <- down %>%
+  filter(avg_log2FC < 0)
+
+DEG_chronic_filtered <- bind_rows(up, down)  
+
+DEG_chronic_filtered$Gene <- factor(DEG_chronic_filtered$Gene, levels = DEG_chronic_filtered$Gene[order(DEG_chronic_filtered$avg_log2FC)])
+
+DEG_chronic_plot <- ggplot(DEG_chronic_filtered, aes(x = Gene, y = avg_log2FC, fill = FC_Percentage_Cell_Expression)) +
+  geom_bar(stat = "identity") +
+  scale_fill_gradient(
+    low = "steelblue",
+    high = "firebrick",
+    limits = c(-0.5, 0.5),
+    labels = scales::label_number(accuracy = 0.1)
+  ) +
+  labs(
+    x = "Gene",
+    y = "Average Log2FC",
+    fill = "Ratio of Cells Expressing the Gene"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    legend.title = element_text(size = 14), 
+    axis.text.x = element_text(angle = 90, hjust = 1, size = 10, vjust = 0.5),
+    legend.position = "bottom"
+  )
+
+DEG_chronic_plot
+
+ggsave("~/R/Figures2/DifferentialExpression_Chronic.png", dpi = 1080, width = 11, height = 8)
+
+```
+
+Some genes are highly expressed maybe in a specific cell type which represent a little % of the total cells and in consequence produce a avg_log2FC > 0, however, the gene is expressed in more uninjured cells than chronic injured cells but in a lower manner.
+
+Enrichment analysis
+
+```{r}
+regulation <- DEG_chronic_filtered [, c("Gene", "Regulation")]
+gene_regulation_status <- regulation$Regulation
+names(gene_regulation_status) <- regulation$Gene
+
+relevant_genes_chronic <- as.vector(DEG_chronic_filtered$Gene)
+
+# Map gene symbols to ENTREZ IDs
+gene_entrez <- mapIds(org.Mm.eg.db,
+                      keys = relevant_genes_chronic,
+                      keytype = "SYMBOL",
+                      column = "ENTREZID")
+gene_entrez <- na.omit(gene_entrez)
+
+# Perform GO enrichment
+go_res <- enrichGO(
+    gene = gene_entrez,
+    OrgDb = org.Mm.eg.db,
+    keyType = "ENTREZID",
+    ont = "BP")
+
+# Filter the GO terms from the enrichGO object directly
+pattern <- "nervous system|nervous system process|regulation of apoptotic signaling pathway|axogenesis|neuron|neurogenesis|axon|spinal|synapse|chronic|long-term|plasticity|regulation of autophagy|regulation of inflammatory response|Wnt|Notch|phosphatidylinositol|MAPK|NF-kappaB|BMP|STAT|SMAD|toll-like|Rho"
+filtered_go_res <- go_res
+filtered_go_res@result <- filtered_go_res@result %>%
+  dplyr::filter(stringr::str_detect(Description, regex(pattern, ignore_case = TRUE)))
+
+# Tidy table
+gene_go <- filtered_go_res@result %>%
+  as.data.frame() %>%
+  separate_rows(geneID, sep = "/") %>%
+  dplyr::select(gene = geneID, go_term = Description, p.adjust) %>%
+  mutate(gene = mapIds(org.Mm.eg.db,
+                       keys = gene,
+                       keytype = "ENTREZID",
+                       column = "SYMBOL"))
+gene_go <- gene_go[!grepl("substrate", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("prostate", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("leukocyte", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("postsynaptic", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("presynapse", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("postsynapse", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("glutamatergic", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("excitatory", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("homotypic", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("cell-matrix", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("neuron projection extension involved in neuron projection guidance", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("protein localization to synapse", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("protein localization to postsynapse", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("spinal cord patterning", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("ventral spinal cord interneuron fate commitment", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("dopaminergic neuron differentiation", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("peripheral nervous system development", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("spinal cord dorsal/ventral patterning", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("prostatic bud formation", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("receptor localization to synapse", gene_go$go_term), ]
+
+# Significance 
+gene_go <- gene_go %>%
+  filter(p.adjust < 0.1)
+
+go_categories <- list(
+  `Neuronal development and specification` = c(
+    "neurogenesis", "neuron differentiation", "fate specification", "fate commitment",
+    "maturation", "neuron migration", "cell-cell adhesion", "neuron remodeling"
+  ),
+  `Axonal growth and regeneration` = c(
+    "axon", "axonogenesis", "guidance", "regeneration", "projection extension",
+    "projection regeneration", "ensheathment", "arborization"
+  ),
+  `Synapse development and plasticity` = c(
+    "synapse", "synaptic", "pruning", "assembly", "organization", "plasticity", "postsynapse"
+  ),
+  `Spinal cord development` = c(
+    "spinal cord", "ventral spinal cord", "motor neuron", "cell differentiation in spinal cord"
+  ),
+  `Nervous system patterning and regulation` = c(
+    "nervous system development", "nervous system process",
+    "regulation of nervous system", "neuron projection development"
+  ),
+  `Immune and inflammatory processes` = c(
+    "immune", "inflammatory", "acute-phase", "antigenic", "immunological",
+    "innate immune", "immunological synapse"
+  ),
+  `Apoptosis and neuronal survival` = c(
+    "apoptotic", "cell survival"
+  ),
+  `Autophagy and cellular stress responses` = c(
+    "autophagy", "stress"
+  ),
+  `TGF-B Signaling` = c(
+    "cellular response to transforming growth factor beta stimulus",
+    "response to transforming growth factor beta",
+    "transforming growth factor beta receptor signaling pathway",
+    "transforming growth factor beta receptor superfamily signaling pathway",
+    "regulation of transforming growth factor beta receptor signaling pathway",
+    "negative regulation of transforming growth factor beta receptor signaling pathway",
+    "positive regulation of transforming growth factor beta receptor signaling pathway",
+    "regulation of cellular response to transforming growth factor beta stimulus",
+    "positive regulation of cellular response to transforming growth factor beta stimulus",
+    "transforming growth factor beta1 production",
+    "transforming growth factor beta production",
+    "regulation of transforming growth factor beta1 production",
+    "positive regulation of transforming growth factor beta production",
+    "regulation of transforming growth factor beta production"
+  ),
+  `Notch Signaling` = c(
+    "Notch signaling pathway",
+    "regulation of Notch signaling pathway",
+    "negative regulation of Notch signaling pathway"
+  ),
+  `PI3K-AKT Signaling` = c(
+    "phosphatidylinositol 3-kinase/protein kinase B signal transduction",
+    "regulation of phosphatidylinositol 3-kinase/protein kinase B signal transduction",
+    "positive regulation of phosphatidylinositol 3-kinase/protein kinase B signal transduction"
+  ),
+  `NF-kB Signaling` = c(
+    "non-canonical NF-kappaB signal transduction",
+    "regulation of non-canonical NF-kappaB signal transduction",
+    "positive regulation of non-canonical NF-kappaB signal transduction",
+    "canonical NF-kappaB signal transduction",
+    "regulation of canonical NF-kappaB signal transduction",
+    "positive regulation of canonical NF-kappaB signal transduction"
+  ),
+  `Wnt Signaling` = c(
+    "Wnt signaling pathway",
+    "canonical Wnt signaling pathway",
+    "regulation of canonical Wnt signaling pathway",
+    "positive regulation of canonical Wnt signaling pathway",
+    "regulation of Wnt signaling pathway",
+    "positive regulation of Wnt signaling pathway"
+  ),
+  `MAPK Signaling` = c(
+    "positive regulation of stress-activated MAPK cascade",
+    "stress-activated MAPK cascade",
+    "regulation of stress-activated MAPK cascade"
+  ),
+  `Rho Signaling` = c(
+    "Rho protein signal transduction",
+    "positive regulation of Rho protein signal transduction", 
+    "regulation of Rho protein signal transduction"
+  ), 
+  `SMAD Signaling` = c(
+    "SMAD protein signal transduction",
+    "regulation of SMAD protein signal transduction", 
+    "negative regulation of SMAD protein signal transduction"
+  ),
+  `STAT Signaling` = c("cell surface receptor signaling pathway via STAT"),
+  `BMP Signaling` = c(
+    "negative regulation of BMP signaling pathway",
+    "regulation of BMP signaling pathway", 
+    "BMP signaling pathway", "response to BMP", "cellular response to BMP stimulus"
+  ),
+  `TLR Signaling` = c(
+    "toll-like receptor signaling pathway",
+    "regulation of toll-like receptor signaling pathway"
+  )
+)
+
+# Categories
+gene_go <- gene_go %>%
+  mutate(
+    go_term_grouped = sapply(go_term, function(term) {
+      match <- names(go_categories)[sapply(go_categories, function(keywords_or_terms) {
+        any(sapply(keywords_or_terms, function(k) str_detect(term, fixed(k, ignore_case = TRUE))))
+      })]
+      if (length(match) > 0) match[1] else term
+    })
+  ) %>%
+  group_by(go_term_grouped) %>%
+  mutate(mean_pvalue_group = mean(p.adjust, na.rm = TRUE)) %>%
+  ungroup()
+
+gene_go <- gene_go %>%
+  group_by(gene, go_term_grouped) %>%
+  mutate(category_count_per_gene = n()) %>%
+  ungroup()
+
+```
+
+
+```{r}
+# 6. Matrix
+gene_go$presence <- 1
+
+gene_go_clean <- gene_go %>%
+  distinct(go_term_grouped, gene, .keep_all = TRUE)
+
+go_signaling <- gene_go_clean %>% 
+  filter(str_detect(go_term_grouped, "Signaling"))
+
+go_non_signaling <- gene_go_clean %>% 
+  filter(!str_detect(go_term_grouped, "Signaling"))
+
+binary_matrix_non_signaling <- go_non_signaling %>%
+  select(go_term_grouped, gene, category_count_per_gene) %>%
+  pivot_wider(names_from = gene, values_from = category_count_per_gene, values_fill = list(category_count_per_gene = 0))
+
+final_matrix_non_signaling <- go_non_signaling %>%
+  distinct(go_term_grouped, mean_pvalue_group) %>%
+  left_join(binary_matrix_non_signaling, by = "go_term_grouped") %>%
+  rowwise() %>%
+  mutate(total_count = sum(c_across(where(is.numeric))[-1])) %>%
+  ungroup()
+
+cols_to_check <- final_matrix_non_signaling %>%
+  select(-go_term_grouped, -mean_pvalue_group, -total_count)
+
+cols_with_values <- names(cols_to_check)[colSums(cols_to_check) > 0]
+
+final_matrix_non_signaling <- final_matrix_non_signaling %>%
+  select(go_term_grouped, mean_pvalue_group, all_of(cols_with_values), total_count)
+
+# Signaling only for the selected ones
+binary_matrix_signaling <- go_signaling %>%
+  select(go_term_grouped, gene, presence) %>%
+  pivot_wider(names_from = gene, values_from = presence, values_fill = list(presence = 0))
+
+final_matrix_signaling <- go_signaling %>%
+  distinct(go_term_grouped, mean_pvalue_group) %>%
+  left_join(binary_matrix_signaling, by = "go_term_grouped") %>%
+  rowwise() %>%
+  mutate(total_count = sum(c_across(where(is.numeric))[-1])) %>%
+  ungroup()
+
+final_matrix_signaling <- final_matrix_signaling[, colnames(final_matrix_signaling) %in% colnames(final_matrix_non_signaling)]
+
+final_matrix_signaling$total_count <- NULL
+cols_to_sum <- setdiff(
+  colnames(final_matrix_signaling)[sapply(final_matrix_signaling, is.numeric)],
+  c("mean_pvalue_group", "go_term_grouped")
+)
+final_matrix_signaling$total_count <- rowSums(final_matrix_signaling[, cols_to_sum])
+
+final_matrix_signaling <- final_matrix_signaling[final_matrix_signaling$total_count != 0, ]
+
+
+# For signaling terms
+matrix_binary_signaling <- as.matrix(final_matrix_signaling[, !(colnames(final_matrix_signaling) %in% c("go_term_grouped", "mean_pvalue_group", "total_count"))])
+rownames(matrix_binary_signaling) <- final_matrix_signaling$go_term_grouped
+
+matrix_counts_signaling <- final_matrix_signaling$total_count
+names(matrix_counts_signaling) <- final_matrix_signaling$go_term_grouped
+
+matrix_pval_signaling <- -log10(final_matrix_signaling$mean_pvalue_group)
+names(matrix_pval_signaling) <- final_matrix_signaling$go_term_grouped
+
+# For non-signaling terms
+matrix_binary_non_signaling <- as.matrix(final_matrix_non_signaling[, !(colnames(final_matrix_non_signaling) %in% c("go_term_grouped", "mean_pvalue_group", "total_count"))])
+rownames(matrix_binary_non_signaling) <- final_matrix_non_signaling$go_term_grouped
+
+matrix_counts_non_signaling <- final_matrix_non_signaling$total_count
+names(matrix_counts_non_signaling) <- final_matrix_non_signaling$go_term_grouped
+
+matrix_pval_non_signaling <- -log10(final_matrix_non_signaling$mean_pvalue_group)
+names(matrix_pval_non_signaling) <- final_matrix_non_signaling$go_term_grouped
+
+col_fun <- colorRamp2(
+  c(0, 1, 4, 8, 12),
+  c("#ebebf3", "#d1d3ea", "#b0b3d9", "#888cc2", "#666ca8"))
+col_fun2 <- colorRamp2(c(min(matrix_counts_non_signaling), max(matrix_counts_non_signaling)), c("#FAEBD7", "#8B8378"))
+col_fun3 <- colorRamp2(c(min(matrix_pval_non_signaling), max(matrix_pval_non_signaling)), c("cadetblue", "tomato"))
+
+col_fun_  <- colorRamp2(c(0,1), c("#ebebf3", "#666ca8"))
+col_fun2_ <- colorRamp2(c(0,1), c("#FAEBD7", "#8B8378"))
+col_fun3_ <- colorRamp2(c(min(matrix_pval_signaling), max(matrix_pval_signaling)), c("cadetblue", "tomato"))
+```
+
+Plots
+
+```{r}
+gene_regulation_status <- gene_regulation_status[colnames(matrix_binary_signaling)]
+
+regulation_colors <- c("Up" = "red", "Down" = "blue")
+
+column_annotation <- HeatmapAnnotation(
+    "Regulation"= anno_simple(
+        gene_regulation_status, 
+        col = regulation_colors,
+        gp = gpar(col = "white", lwd = 1.5)),
+    annotation_name_side = "left",
+    annotation_name_gp = gpar(fontsize = 9))
+
+
+hm_binary_signaling <- Heatmap(matrix_binary_signaling,
+                               name = "Status",
+                               col = col_fun_,
+                               rect_gp = gpar(col = "white", lwd = 2),
+                               clustering_method_columns = "ward.D2",
+                               clustering_distance_columns = "euclidean",
+                               cluster_rows = FALSE,
+                               show_row_dend = FALSE,
+                               show_column_dend = FALSE,
+                               row_names_gp = gpar(fontsize = 9),
+                               row_names_side = "left",
+                               column_names_rot = 90,
+                               column_names_gp = gpar(fontsize = 9),
+                               heatmap_legend_param = list(title = "Status", at = c(0, 1),
+                                                           labels = c("Absent", "Present")),
+                               column_title = " ",
+                               column_title_gp = gpar(fontsize = 12),
+                               bottom_annotation = column_annotation)
+
+# Heatmap for signaling terms - Count
+hm_count_signaling <- Heatmap(matrix_counts_signaling,
+                              rect_gp = gpar(col = "white", lwd = 2),
+                              name = "Count",
+                              col = col_fun2_,
+                              cluster_rows = FALSE,
+                              cluster_columns = FALSE,
+                              show_row_names = FALSE,
+                              width = unit(1, "cm"),
+                              column_title = " ",
+                              column_names_rot = 90,
+                              column_names_gp = gpar(fontsize = 8),
+                              column_title_gp = gpar(fontsize = 8))
+
+# Heatmap for signaling terms - P-value
+hm_pval_signaling <- Heatmap(matrix_pval_signaling,
+                             rect_gp = gpar(col = "white", lwd = 2),
+                             name = "-log10 P-value",
+                             col = col_fun3_,
+                             cluster_rows = FALSE,
+                             cluster_columns = FALSE,
+                             show_row_names = FALSE,
+                             width = unit(1, "cm"),
+                             column_title = " ",
+                             column_names_rot = 90,
+                             column_names_gp = gpar(fontsize = 8),
+                             column_title_gp = gpar(fontsize = 8))
+
+gene_regulation_status2 <- gene_regulation_status[colnames(matrix_binary_non_signaling)]
+
+regulation_colors <- c("Up" = "red", "Down" = "blue")
+
+column_annotation <- HeatmapAnnotation(
+    "Regulation"= anno_simple(
+        gene_regulation_status2, 
+        col = regulation_colors,
+        gp = gpar(col = "white", lwd = 1.5)),
+    annotation_name_side = "left",
+    annotation_name_gp = gpar(fontsize = 6))
+
+
+# Heatmap for non-signaling terms - Status (Presence/Absence)
+hm_binary_non_signaling <- Heatmap(matrix_binary_non_signaling,
+                               name = "Status",
+                               col = col_fun,
+                               rect_gp = gpar(col = "white", lwd = 2),
+                               clustering_method_columns = "ward.D2",
+                               clustering_distance_columns = "euclidean",
+                               cluster_rows = FALSE,
+                               show_row_dend = FALSE,
+                               show_column_dend = FALSE,
+                               row_names_gp = gpar(fontsize = 7),
+                               row_names_side = "left",
+                               column_names_rot = 90,
+                               column_names_gp = gpar(fontsize = 7),
+                               heatmap_legend_param = list(title = "GO Terms Per Category", at = c(0, 12),
+                                                           labels = c("0", "12")),
+                               column_title = " ",
+                               column_title_gp = gpar(fontsize = 12),
+                               bottom_annotation = column_annotation)
+
+# Heatmap for non-signaling terms - Count
+hm_count_non_signaling <- Heatmap(matrix_counts_non_signaling,
+                                  rect_gp = gpar(col = "white", lwd = 2),
+                                  name = "Count",
+                                  col = col_fun2,
+                                  cluster_rows = FALSE,
+                                  cluster_columns = FALSE,
+                                  show_row_names = FALSE,
+                                  width = unit(1, "cm"),
+                                  column_title = " ",
+                                  column_names_rot = 90,
+                                  column_names_gp = gpar(fontsize = 6),
+                                  column_title_gp = gpar(fontsize = 6))
+
+# Heatmap for non-signaling terms - P-value
+hm_pval_non_signaling <- Heatmap(matrix_pval_non_signaling,
+                                 rect_gp = gpar(col = "white", lwd = 2),
+                                 name = "-log10 P-value",
+                                 col = col_fun3,
+                                 cluster_rows = FALSE,
+                                 cluster_columns = FALSE,
+                                 show_row_names = FALSE,
+                                 width = unit(1, "cm"),
+                                 column_title = " ",
+                                 column_names_rot = 90,
+                                 column_names_gp = gpar(fontsize = 6),
+                                 column_title_gp = gpar(fontsize = 6))
+
+regulation_legend <- Legend(
+  title = "Regulation",
+  at = c("Up", "Down"),
+  labels = c("Upregulated", "Downregulated"),
+  legend_gp = gpar(fill = c("Up" = "red", "Down" = "blue"))
+)
+draw(hm_binary_non_signaling + hm_count_non_signaling + hm_pval_non_signaling, annotation_legend_list = list(regulation_legend))
+draw(hm_binary_signaling + hm_count_signaling + hm_pval_signaling, annotation_legend_list = list(regulation_legend))
+
+# Signaling
+png("~/R/Figures2/Enrichment_Signaling_Chronic.png", width = 3500, height = 2500, res = 550)
+draw(hm_binary_signaling + hm_count_signaling + hm_pval_signaling, annotation_legend_list = list(regulation_legend))
+dev.off()
+
+# Non-signaling
+png("~/R/Figures2/Enrichment_NonSignaling_Chronic_Grouped.png", width = 5000, height = 2500, res = 500)
+draw(hm_binary_non_signaling + hm_count_non_signaling + hm_pval_non_signaling, annotation_legend_list = list(regulation_legend))
+dev.off()
+
+genes_subchronic <- unique(c(colnames(matrix_binary_non_signaling), colnames(matrix_binary_signaling)))
+
+genes_filtered <- unique(c(genes_subchronic, genes_acute))
+saveRDS(genes_filtered, file = "~/R/Downloads/Genes_Filtered.rds")
+saveRDS(matrix_binary_non_signaling, file = "~/R/Downloads/Go_Chronic.rds")
+```
+
