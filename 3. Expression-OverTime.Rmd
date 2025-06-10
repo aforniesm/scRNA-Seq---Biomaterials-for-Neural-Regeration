@@ -83,6 +83,7 @@ intersections_up
 venn_down <- venn(downregulated, show.plot = FALSE)
 intersections_down <- attr(venn_down, "intersections")
 intersections_down
+
 ```
 
 
@@ -119,7 +120,7 @@ results1 <-  results1 %>%
   filter(Gene %in% interest_genes)
 
 results1 <-  results1 %>% 
-  filter(!(Gene %in% c("S100a9","Fn1")))
+  filter(!(Gene %in% c("S100a9","Fn1","Thbs1")))
 
 results2 <-  results2 %>% 
   filter(Gene %in% interest_genes)
@@ -128,10 +129,10 @@ results3 <-  results3 %>%
   filter(Gene %in% interest_genes)
 
 results4 <- results3 %>%
-  filter(Gene %in% c("Lgi2", "Lamb2", "Lama5", "Cbln1", "Cxcl12", "Plxnb1"))
+  filter(Gene %in% c("Lgi2", "Cbln1", "Cxcl12", "Plxnb1", "Thbs1"))
 
 results3 <-  results3 %>% 
-  filter(!(Gene %in% c("Cbln1", "Lamb2", "Lama5", "Lgi2", "Plxnb1", "Cxcl12")))
+  filter(!(Gene %in% c("Cbln1", "Lgi2", "Plxnb1", "Cxcl12")))
 
 results_long1 <- results1 %>%
   pivot_longer(cols = c(`Uninjured`,`1 dpi`, `7 dpi`,`21 dpi`, `4-6 wpi`), names_to = "TimePoint", values_to = "log2FC") %>% mutate(TimePoint = factor(TimePoint, levels = c("Uninjured", "1 dpi", "7 dpi", "21 dpi", "4-6 wpi")))
@@ -187,51 +188,6 @@ ggsave("~/R/Figures2/Layout_Chronic.png", timevariation4, dpi = 1080, width = 14
 ```
 
 
-Cell type and Time
 
-```{r}
-library(dplyr)
-library(ggplot2)
-library(ggrepel)
-
-celltype_1dpi <- read_excel("~/R/Data/DEG_Celltype_1dpi.xlsx")
-celltype_7dpi <- read_excel("~/R/Data/DEG_Celltype_7dpi.xlsx")
-celltype_21dpi <- read_excel("~/R/Data/DEG_Celltype_21dpi.xlsx")
-celltype_chronic <- read_excel("~/R/Data/DEG_Celltype_Chronic.xlsx")
-
-deg_celltype <- bind_rows(celltype_chronic, celltype_1dpi, celltype_21dpi, celltype_7dpi)
-
-
-interest_genes <- readRDS(file = "~/R/Downloads/Genes_Correlation.rds")
-
-deg_celltype <- deg_celltype %>%
-  filter(Gene %in% interest_genes)
-
-deg_celltype <- deg_celltype %>% dplyr::select(matches("Gene|avg_log2FC|time|celltype"))
-
-new_rows <- deg_celltype %>% distinct(Gene, celltype) %>% mutate(time = "Uninjured", avg_log2FC = 0)
-deg_celltype <- bind_rows(deg_celltype, new_rows) %>% arrange(Gene, celltype, time)
-deg_celltype$time <- factor(deg_celltype$time, levels = c("Uninjured","1 dpi", "7 dpi", "21 dpi", "4-6 wpi"))
-
-label_data <- deg_celltype %>%
-  group_by(Gene, celltype) %>%
-  slice_max(order_by = time, n = 1, with_ties = FALSE) %>%
-  ungroup()
-
-layout_celltype <- ggplot(deg_celltype, aes(x = time, y = avg_log2FC, group = Gene, color = Gene)) +
-  geom_line() +
-  geom_point() +
-  facet_wrap(. ~ celltype, scales = "free_y") +
-  geom_text_repel(data = label_data, aes(label = Gene), size = 3, nudge_x = 0.3, direction = "y", segment.color = "grey50") +
-  theme_minimal() +
-  labs(x = "Time Post-Injury", y = "log2 Fold Change", title = "Expression Changes Over Time") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  scale_color_viridis_d()
-
-layout_celltype
-
-ggsave("~/R/Figures2/MainCelltypes_Candidates.png", width = 12, height = 8, dpi = 1080)
-
-```
 
 

@@ -48,39 +48,31 @@ go_res <- enrichGO(
     gene = gene_entrez,
     OrgDb = org.Mm.eg.db,
     keyType = "ENTREZID",
-    ont = "BP")
+    ont = "BP", 
+    pAdjustMethod = "fdr")
 
 # Filter the GO terms from the enrichGO object directly
 pattern <- "nervous system|nervous system process|regulation of apoptotic signaling pathway|axogenesis|neuron|axon|spinal|synapse|chronic|long-term|acute|innate|plasticity|Wnt|Notch|phosphatidylinositol|MAPK|NF-kappaB|BMP|STAT|SMAD|toll-like|Rho"
 filtered_go_res <- go_res
 filtered_go_res@result <- filtered_go_res@result %>%
+  filter(p.adjust < 0.1) %>%
   dplyr::filter(stringr::str_detect(Description, regex(pattern, ignore_case = TRUE)))
 
 # Tidy table
 gene_go <- filtered_go_res@result %>%
   as.data.frame() %>%
   separate_rows(geneID, sep = "/") %>%
-  dplyr::select(gene = geneID, go_term = Description, pvalue) %>%
+  dplyr::select(gene = geneID, go_term = Description, p.adjust) %>%
   mutate(gene = mapIds(org.Mm.eg.db,
                        keys = gene,
                        keytype = "ENTREZID",
                        column = "SYMBOL"))
-gene_go <- gene_go[!grepl("substrate", gene_go$go_term), ]
-gene_go <- gene_go[!grepl("prostate", gene_go$go_term), ]
-gene_go <- gene_go[!grepl("leukocyte", gene_go$go_term), ]
-gene_go <- gene_go[!grepl("postsynaptic", gene_go$go_term), ]
-gene_go <- gene_go[!grepl("homotypic", gene_go$go_term), ]
-gene_go <- gene_go[!grepl("cell-matrix", gene_go$go_term), ]
+
 gene_go <- gene_go[!grepl("neuron projection extension involved in neuron projection guidance", gene_go$go_term), ]
-gene_go <- gene_go[!grepl("protein localization to synapse", gene_go$go_term), ]
-gene_go <- gene_go[!grepl("protein localization to postsynapse", gene_go$go_term), ]
-gene_go <- gene_go[!grepl("spinal cord patterning", gene_go$go_term), ]
-gene_go <- gene_go[!grepl("ventral spinal cord interneuron fate commitment", gene_go$go_term), ]
-gene_go <- gene_go[!grepl("dopaminergic neuron differentiation", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("protein localization", gene_go$go_term), ]
 gene_go <- gene_go[!grepl("peripheral nervous system development", gene_go$go_term), ]
-gene_go <- gene_go[!grepl("spinal cord dorsal/ventral patterning", gene_go$go_term), ]
-gene_go <- gene_go[!grepl("prostatic bud formation", gene_go$go_term), ]
-gene_go <- gene_go[!grepl("receptor localization to synapse", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("prostate", gene_go$go_term), ]
+gene_go <- gene_go[!grepl("prostatic", gene_go$go_term), ]
 
 counts_go <- table(gene_go$gene)
 ```
