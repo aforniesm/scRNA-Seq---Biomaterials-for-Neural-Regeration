@@ -100,29 +100,27 @@ anchors_integration <- FindIntegrationAnchors(object.list = seurat_list, dims = 
 
 rm(seurat_list)
 
-save.image(file = "~/R/Downloads/AllData_Anchors2.RData")
+save.image(file = "~/R/Downloads/AllData_Anchors.RData")
 ```
 
 Integration 
 
 ```{r}
-load(file = "~/R/Downloads/AllData_Anchors2.RData")
+load(file = "~/R/Downloads/AllData_Anchors.RData")
 gc()
 seurat_integrated <- IntegrateData(anchorset = anchors_integration, dims = 1:30, verbose = TRUE, normalization.method = "LogNormalize") 
 
 rm(seurat_list, anchors, anchors_integration)
 
-save.image(file = "~/R/Downloads/AllData_CCA2.RData")
+save.image(file = "~/R/Downloads/AllData_CCA.RData")
 ```
 
 Load integrated dataset
 
 ```{r}
-load(file = "~/R/Downloads/AllData_CCA2.RData")
+load(file = "~/R/Downloads/AllData_CCA.RData")
 gc()
 ```
-
-Check integration
 
 ```{r}
 # Check Integration
@@ -143,7 +141,6 @@ datasets
 
 ggsave("~/R/Figures2/Datasets_MetaAnalysis.png", datasets, dpi = 1080, height = 8, width = 9)
 ```
-
 
 Cell type annotation - Transfer Learning
 
@@ -180,13 +177,17 @@ rm(query, reference)
 cells_to_keep <- rownames(seurat_integrated@meta.data)[!is.na(seurat_integrated@meta.data$predicted_celltype)]
 seurat_integrated <- subset(seurat_integrated, cells = cells_to_keep)
  # No celltype label - because no prediction.score > 0.9
+```
 
-# Dictionary
+
+```{r}
+# Accuracy
+
 mapping <- list(
   "Astrocyte" = "Astrocytes",
   "Astrocytes" = "Astrocytes",
-  "B cells" = c("B cells", "Myeloid, dividing"),
-  "Dendritic" = c("Peripheral immune cells", "B cells", "NK, T cells"),
+  "B cells" = c("B cells","Peripheral immune cells"),
+  "Dendritic" = c("Peripheral immune cells", "B cells", "NK, T cells", "Myeloid, dividing"),
   "Div-Myeloid" = "Myeloid, dividing",
   "Dorsal" = "Dorsal",
   "Endothelial" = "Vascular endothelial cells",
@@ -195,7 +196,7 @@ mapping <- list(
   "Ependymal cells" = "Ependymal cells",
   "Fibroblast" = "Vascular cells",
   "Leptomeninges" = "Vascular cells",
-  "Lymphocyte" = c("Peripheral immune cells", "B cells", "NK, T cells", "Myeloid, dividing"),
+  "Lymphocyte" = c("Peripheral immune cells", "B cells", "NK, T cells"),
   "Macrophage" = c("Peripheral immune cells", "Myeloid, dividing"),
   "Mature oligodendrocytes (MOL)" = "Mature oligodendrocytes (MOL)",
   "Microglia" = "Microglia",
@@ -207,7 +208,7 @@ mapping <- list(
   "Neurons" = c("Dorsal", "Ventral"),
   "Neutrophil" = c("Peripheral immune cells", "Myeloid, dividing"),
   "Newly formed oligodendrocytes (NFOL)" = "Newly formed oligodendrocytes (NFOL)",
-  "NK, T cells" = c("Peripheral immune cells", "NK, T cells", "Myeloid, dividing"),
+  "NK, T cells" = c("Peripheral immune cells", "NK, T cells"),
   "Oligodendrocyte" = c("Newly formed oligodendrocytes (NFOL)", "Mature oligodendrocytes (MOL)", "Myelin forming oligodendrocytes (MFOL)"),
   "Oligodendrocytes" = c("Newly formed oligodendrocytes (NFOL)", "Mature oligodendrocytes (MOL)", "Myelin forming oligodendrocytes (MFOL)"),
   "Oligodendrocyte Progenitors/Precursors" = "Oligodendrocytes precursor cells (OPC)",
@@ -251,9 +252,11 @@ accuracy
 # Filter cells bad annotated
 discrepancies <- metadata[!metadata$is_match, c("celltype", "predicted_celltype")]
 cells_to_remove <- rownames(discrepancies)
+gc()
 seurat_integrated <- seurat_integrated[, !colnames(seurat_integrated) %in% cells_to_remove]
 
 # UMAP Plot for cell types
+seurat_integrated <- RunUMAP(seurat_integrated, dims = 1:30)
 
 celltype <- DimPlot(seurat_integrated, group.by = "predicted_celltype", label = T, label.size = 5.5, repel = T) + labs(x = "UMAP 1", y = "UMAP 2", caption = "Cells with prediction score > 0.9
                                                                                           Transfer learning accuracy = 97.22%") +
@@ -272,7 +275,7 @@ ggsave("~/R/Figures2/Cells_MetaAnalysis.png", celltype, dpi = 1080, height = 9, 
 ```{r}
 
 metadata <- seurat_integrated@meta.data
-metadata <- metadata %>% select(matches("nCount_RNA|nFeature_RNA|time|celltype|technology|dataset|predicted_celltype"))
+metadata <- metadata %>% dplyr::select(matches("nCount_RNA|nFeature_RNA|time|celltype|technology|dataset|predicted_celltype"))
 
 metadata$time[metadata$time == "Sub-Acute"] <- "21 dpi"
 metadata$time[metadata$time == "Sub-Chronic"] <- "4-6 wpi"
@@ -296,22 +299,21 @@ table(seurat_integrated$dataset)
 seurat_integrated@meta.data <- seurat_integrated@meta.data %>%
   mutate(celltype_grouped = case_when(
     celltype %in% c("Mature oligodendrocytes (MOL)", "Myelin forming oligodendrocytes (MFOL)") ~ "Oligodendrocytes",
-    celltype %in% "Newly formed oligodendrocytes (NFOL)" ~ "Newly formed oligodendrocytes",
+    celltype == "Newly formed oligodendrocytes (NFOL)" ~ "Newly formed oligodendrocytes",
     celltype == "Oligodendrocytes precursor cells (OPC)" ~ "OPCs",
     celltype == "Astrocytes" ~ "Astrocytes",
     celltype == "Ependymal cells" ~ "Ependymal cells",
     celltype == "Microglia" ~ "Microglia",
     celltype %in% c("B cells", "NK, T cells", "Peripheral immune cells") ~ "Immune cells",
-     celltype %in% "Myeloid, dividing" ~ "Myeloid",
-    celltype %in% "Vascular endothelial cells" ~ "Endothelial cells",
-    celltype %in% "Vascular cells" ~ "Vascular cells",
+    celltype == "Vascular endothelial cells" ~ "Endothelial cells",
+    celltype == "Vascular cells" ~ "Vascular cells",
+    celltype == "Myeloid, dividing" ~ "Myeloid",
     celltype %in% c("Ventral", "Dorsal") ~ "Neurons",
     TRUE ~ "Other"
   ))
 
 seurat_integrated@meta.data$celltype <- seurat_integrated@meta.data$celltype_grouped
 
-table(seurat_integrated@meta.data$celltype, seurat_integrated@meta.data$dataset)
 
 ```
 
@@ -359,7 +361,7 @@ seurat_integrated@meta.data %>%
 seurat_integrated <- subset(seurat_integrated, subset = Phase != "Undecided")
 
 cc_score <- DimPlot(seurat_integrated,
-        reduction = "umap",
+        reduction = "pca",
         group.by= "Phase", split.by = "Phase") + labs(title = "Cell Cycle Score Assessment", x = "PCA 1", y = "PCA 2") + theme(
   legend.title = element_text(size = 16),
   legend.text = element_text(size = 16)
@@ -367,7 +369,7 @@ cc_score <- DimPlot(seurat_integrated,
 cc_score
 
 cc_score2 <- DimPlot(seurat_integrated,
-        reduction = "umap",
+        reduction = "pca",
         group.by= "Phase") + labs(title = "Cell Cycle Score Assessment", x = "PCA 1", y = "PCA 2") + theme(
   legend.title = element_text(size = 16),
   legend.text = element_text(size = 16)
@@ -387,7 +389,9 @@ table(seurat_integrated@meta.data$Phase)
 ```
 
 ```{r}
-table(seurat_integrated$celltype, seurat_integrated$dataset)
+summary <- as.data.frame.array(table(seurat_integrated$celltype, seurat_integrated$dataset))
+write.xlsx(summary, "~/R/Downloads/Descriptive.xlsx")
+
 ```
 
 *Differential expression analysis* -> RNA assay: no integrated
@@ -416,7 +420,7 @@ saveRDS(seurat_integrated_ME, "~/R/Downloads/Seurat_Integrated_ME.rds")
 
 ```
 
-FindMarkers analysis
+DE analysis
 
 ```{r}
 

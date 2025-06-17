@@ -16,18 +16,18 @@ library(tidyverse)
 library(readxl)
 library(ComplexHeatmap)
 library(openxlsx)
+library(circlize)
 ```
-
 
 Biomarker characterization
 
 ```{r}
-biomarkers <- readRDS("~/R/Downloads/Genes_Correlation.rds")
+biomarkers_acute <- readRDS("~/R/Downloads/Genes_Corr_Acute.rds")
 
 combined_results <- read_excel("~/R/Data/DEG_Celltype_7dpi.xlsx")
 
 combined_results <- combined_results %>%
-  filter(Gene %in% genes)
+  filter(Gene %in% biomarkers_acute)
 
 heatmap_data <- combined_results %>%
   dplyr::select(Gene, celltype, avg_log2FC) %>%
@@ -37,26 +37,42 @@ heatmap_data <- combined_results %>%
 
 heatmap_data[is.na(heatmap_data)] <- 0
 
+colnames(heatmap_data)[colnames(heatmap_data) == "Newly formed oligodendrocytes"] <- "NFOLs"
+
 heatmap_7dpi <- Heatmap(
-  heatmap_data,
-  col = circlize::colorRamp2(c(-5, 0, 5), c("blue", "white", "red")),
-  row_names_gp = gpar(fontsize = 7),
-  column_names_gp = gpar(fontsize = 8),
-  name = "log2FC", row_title_side = "left", column_title_side = "bottom", column_names_rot = 90
+  t(heatmap_data),
+  col = colorRamp2(c(-5, 0, 5), c("steelblue", "white", "tomato")),
+  name = "log2FC",
+  rect_gp = gpar(col = "grey", lwd = 2),
+  row_names_gp = gpar(fontsize = 11),
+  row_names_side = "left",
+  column_names_gp = gpar(fontsize = 12),
+  column_names_rot = 90,
+  cluster_rows = FALSE,
+  cluster_columns = FALSE,
+  show_row_names = TRUE,
+  clustering_method_columns = "ward.D2",
+  clustering_distance_columns = "euclidean",
+  column_title = "Acute",
+  column_title_gp = gpar(fontsize = 10)
 )
 
 heatmap_7dpi
 
 png("~/R/Figures2/Heatmap_Celltype_7dpi.png",  width = 2500, height = 3500, res = 580)
-draw(heatmap_7dpi)
+draw(heatmap_7dpi,
+  column_title = "          Expression in different cell types of the acute biomarkers",
+  column_title_gp = gpar(fontsize = 16, fontface = "bold"))
 dev.off()
 ```
 
 ```{r}
+biomarkers_subchronic <- readRDS("~/R/Downloads/Genes_Corr_Subchronic.rds")
+
 combined_results <- read_excel("~/R/Data/DEG_Celltype_Chronic.xlsx")
 
 combined_results <- combined_results %>%
-  filter(Gene %in% genes)
+  filter(Gene %in% biomarkers_subchronic)
 
 heatmap_data <- combined_results %>%
   dplyr::select(Gene, celltype, avg_log2FC) %>%
@@ -66,20 +82,37 @@ heatmap_data <- combined_results %>%
 
 heatmap_data[is.na(heatmap_data)] <- 0
 
+colnames(heatmap_data)[colnames(heatmap_data) == "Newly formed oligodendrocytes"] <- "NFOLs"
+
 heatmap_chronic <- Heatmap(
-  heatmap_data,
-  col = circlize::colorRamp2(c(-5, 0, 5), c("blue", "white", "red")),
-  row_names_gp = gpar(fontsize = 8),
-  column_names_gp = gpar(fontsize = 8),
-  name = "log2FC", row_title_side = "right", column_title_side = "bottom", column_names_rot = 90
+  t(heatmap_data),
+  col = colorRamp2(c(-5, 0, 5), c("steelblue", "white", "tomato")),
+  name = "log2FC",
+  rect_gp = gpar(col = "grey", lwd = 2),
+  row_names_gp = gpar(fontsize = 12),
+  row_names_side = "left",
+  column_names_gp = gpar(fontsize = 12),
+  column_names_rot = 90,
+  cluster_rows = FALSE,
+  cluster_columns = FALSE,
+  show_row_names = TRUE,
+  clustering_method_columns = "ward.D2",
+  clustering_distance_columns = "euclidean",
+  column_title = "Sub-chronic",
+  column_title_gp = gpar(fontsize = 10)
 )
 
 heatmap_chronic
 
-png("~/R/Figures2/Heatmap_Celltype_Chronic.png",  width = 2500, height = 3500, res = 580)
-draw(heatmap_chronic)
+png("~/R/Figures2/Heatmap_Celltype_Acute+Sub.png",  width = 3500, height = 2500, res = 600)
+draw(heatmap_7dpi + heatmap_chronic,
+  column_title = "                         Expression in different cell types of biomarkers    ",
+  column_title_gp = gpar(fontsize = 12, fontface = "bold", hjust = 0.5)
+)
 dev.off()
 ```
+
+
 ```{r}
 library(readxl)
 library(dplyr)
@@ -89,7 +122,7 @@ library(circlize)
 library(ComplexHeatmap)
 
 # Load gene list
-genes <- readRDS("~/R/Downloads/Genes_Correlation.rds")
+genes <- readRDS("~/R/Downloads/Genes_Corr_Both.rds")
 
 # ---- 7 dpi ----
 results_7dpi <- read_excel("~/R/Data/DEG_Celltype_7dpi.xlsx") %>%
@@ -102,8 +135,10 @@ mat_7dpi <- results_7dpi %>%
 
 mat_7dpi[is.na(mat_7dpi)] <- 0
 
+colnames(mat_7dpi)[colnames(mat_7dpi) == "Newly formed oligodendrocytes"] <- "NFOLs"
+
 hm_7dpi <- Heatmap(
-  as.matrix(mat_7dpi),
+  t(as.matrix(mat_7dpi)),
   col = colorRamp2(c(-5, 0, 5), c("steelblue", "white", "tomato")),
   name = "log2FC",
   rect_gp = gpar(col = "grey", lwd = 2),
@@ -114,8 +149,10 @@ hm_7dpi <- Heatmap(
   cluster_rows = FALSE,
   cluster_columns = FALSE,
   show_row_names = TRUE,
-  column_title = "7 dpi",
-  column_title_gp = gpar(fontsize = 10)
+  column_title = "Acute",
+  column_title_gp = gpar(fontsize = 10),
+  clustering_method_columns = "ward.D2",
+  clustering_distance_columns = "euclidean"
 )
 
 # ---- Chronic ----
@@ -132,8 +169,10 @@ mat_chronic[is.na(mat_chronic)] <- 0
 # Align row order with 7 dpi
 mat_chronic <- mat_chronic[rownames(mat_7dpi), ]
 
+colnames(mat_chronic)[colnames(mat_chronic) == "Newly formed oligodendrocytes"] <- "NFOLs"
+
 hm_chronic <- Heatmap(
-  as.matrix(mat_chronic),
+  t(as.matrix(mat_chronic)),
   col = colorRamp2(c(-5, 0, 5), c("steelblue", "white", "tomato")),
   name = "log2FC",
   rect_gp = gpar(col = "grey", lwd = 2),
@@ -143,16 +182,18 @@ hm_chronic <- Heatmap(
   cluster_rows = FALSE,
   cluster_columns = FALSE,
   show_row_names = FALSE,
-  column_title = "4-6 wpi",
-  column_title_gp = gpar(fontsize = 10)
+  column_title = "Sub-chronic",
+  column_title_gp = gpar(fontsize = 10),
+  clustering_method_columns = "ward.D2",
+  clustering_distance_columns = "euclidean"
 )
 
 # ---- Final plot ----
-png("~/R/Figures2/Heatmap_Celltype_Combined.png", width = 3800, height = 3500, res = 600)
+png("~/R/Figures2/Heatmap_Celltype_Combined.png", width = 3200, height = 2800, res = 600)
 draw(
   hm_7dpi + hm_chronic,
-  column_title = "                Expression in different cell types of the final biomarkers",
-  column_title_gp = gpar(fontsize = 16, fontface = "bold")
+  column_title = "                Expression in different cell types of the biomarkers",
+  column_title_gp = gpar(fontsize = 10, fontface = "bold")
 )
 dev.off()
 
@@ -172,8 +213,7 @@ celltype_chronic <- read_excel("~/R/Data/DEG_Celltype_4-6wpi.xlsx")
 
 deg_celltype <- bind_rows(celltype_chronic, celltype_1dpi, celltype_21dpi, celltype_7dpi)
 
-
-interest_genes <- readRDS(file = "~/R/Downloads/Genes_Correlation.rds")
+interest_genes <- readRDS(file = "~/R/Downloads/Important_Genes.rds")
 
 deg_celltype <- deg_celltype %>%
   filter(Gene %in% interest_genes)

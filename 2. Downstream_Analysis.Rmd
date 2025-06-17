@@ -23,12 +23,13 @@ library(openxlsx)
 ```
 
 
+
 ```{r}
 DEG_1dpi <- read_excel("~/R/Downloads/DEG_FirstDay.xlsx")
 DEG_7dpi <- read_excel("~/R/Downloads/DEG_Acute.xlsx")
 DEG_21dpi <- read_excel("~/R/Downloads/DEG_21dpi.xlsx")
 DEG_1mpi <- read_excel("~/R/Downloads/DEG_Sub-Chronic.xlsx")
-seurat_integrated_ME <- readRDS("~/R/Downloads/Seurat_Integrated_ME.rds")
+
 ```
 
 Time: Acute - 7 dpi
@@ -57,7 +58,7 @@ go_res <- enrichGO(
 barplot(go_res, showCategory = 20)
 
 # Filter the GO terms from the enrichGO object directly
-pattern <- "nervous system development|nervous system process|apoptotic signaling pathway|neuron|neurogenesis|axon|axogenesis|spinal|synapse|acute|innate|plasticity|regulation of autophagy|regulation of inflammatory response|metallopeptidase|^regulation of peptidase activity$"
+pattern <- "nervous system development|nervous system process|apoptotic signaling pathway|neuron|neurogenesis|axon|axogenesis|spinal|synapse|acute|innate|plasticity|regulation of autophagy|regulation of inflammatory response|metallopeptidase|^regulation of peptidase activity$|^regulation of reactive oxygen species metabolic process$|neuroinflammatory"
 filtered_go_res <- go_res
 filtered_go_res@result <- filtered_go_res@result %>%
   filter(p.adjust < 0.1) %>%
@@ -75,12 +76,7 @@ gene_go <- filtered_go_res@result %>%
 
 gene_go <- gene_go[!grepl("peripheral nervous system development", gene_go$go_term), ]
 gene_go <- gene_go[!grepl("receptor localization", gene_go$go_term), ]
-gene_go <- gene_go %>%
-  filter(!(go_term == "regulation of peptidase activity" & !(gene %in% c(
-  "Lgals3", "Postn", "Col3a1", "Serpina3n", "C1qa", "Tnc", "C1qc", "C1qb", "Thbs2", "S100a9",
-  "Sema6d", "Shh", "Cxcl12", "Hapln2", "Spock3", "Lgi1", "Tnfaip6", "F12", "Serpinb1a", "F2"
-))))
- 
+
 genes_sci <- unique(gene_go$gene)
 
 DEG_7dpi_filtered <- DEG_7dpi_filtered %>%
@@ -146,7 +142,7 @@ go_res <- enrichGO(
     pAdjustMethod = "fdr")
 
 # Filter the GO terms from the enrichGO object directly
-pattern <- "nervous system development|nervous system process|regulation of apoptotic signaling pathway|neuron|neurogenesis|axon|axogenesis|spinal|synapse|acute|innate|plasticity|regulation of autophagy|regulation of inflammatory response|metallopeptidase|^regulation of peptidase activity$|Wnt|Notch|phosphatidylinositol|MAPK|NF-kappaB|BMP|STAT|SMAD|toll-like|Rho|tumor necrosis factor"
+pattern <- "nervous system development|nervous system process|regulation of apoptotic signaling pathway|neuron|neurogenesis|axon|axogenesis|spinal|synapse|acute|innate|plasticity|regulation of autophagy|regulation of inflammatory response|metallopeptidase|^regulation of peptidase activity$|^regulation of reactive oxygen species metabolic process$|neuroinflammatory|Wnt|Notch|phosphatidylinositol|MAPK|NF-kappaB|BMP|STAT|SMAD|toll-like|Rho|tumor necrosis factor"
 filtered_go_res <- go_res
 filtered_go_res@result <- filtered_go_res@result %>%
   filter(p.adjust < 0.1) %>%
@@ -167,12 +163,6 @@ gene_go <- gene_go[!grepl("protein localization", gene_go$go_term), ]
 gene_go <- gene_go[!grepl("peripheral nervous system development", gene_go$go_term), ]
 gene_go <- gene_go[!grepl("prostatic", gene_go$go_term), ]
 gene_go <- gene_go[!grepl("neuron projection extension involved in neuron projection guidance", gene_go$go_term), ]
-
-gene_go <- gene_go %>%
-  filter(!(go_term == "regulation of peptidase activity" & !(gene %in% c(
-  "Lgals3", "Postn", "Col3a1", "Serpina3n", "C1qa", "Tnc", "C1qc", "C1qb", "Thbs2", "S100a9",
-  "Sema6d", "Shh", "Cxcl12", "Hapln2", "Spock3", "Lgi1", "Tnfaip6", "F12", "Serpinb1a", "F2"
-))))
 
 signaling_pathways <- list(
   `TGF-B Signaling` = c(
@@ -490,7 +480,7 @@ draw(hm_binary_signaling + hm_count_signaling + hm_pval_signaling, annotation_le
 dev.off()
 
 # Non-signaling
-png("~/R/Figures2/Enrichment_NonSignaling_7dpi.png", width = 4500, height = 3000, res = 600)
+png("~/R/Figures2/Enrichment_NonSignaling_7dpi.png", width = 4200, height = 2800, res = 650)
 draw(hm_binary_non_signaling + hm_count_non_signaling + hm_pval_non_signaling, annotation_legend_list = list(regulation_legend), annotation_legend_side = "right")
 dev.off()
 
@@ -529,7 +519,7 @@ go_res <- enrichGO(
 barplot(go_res, showCategory = 20)
 
 # Filter the GO terms from the enrichGO object directly
-pattern <- "nervous system|nervous system process|apoptotic signaling pathway|axogenesis|neuron|neurogenesis|axon|spinal|synapse|chronic|long-term|plasticity|regulation of autophagy|regulation of inflammatory response|metallopeptidase|^regulation of peptidase activity$"
+pattern <- "nervous system|nervous system process|apoptotic signaling pathway|axogenesis|neuron|neurogenesis|axon|spinal|synapse|chronic|long-term|plasticity|regulation of autophagy|regulation of inflammatory response|metallopeptidase|^regulation of peptidase activity$|^regulation of reactive oxygen species metabolic process$|neuroinflammatory"
 
 filtered_go_res <- go_res
 filtered_go_res@result <- filtered_go_res@result %>%
@@ -548,12 +538,6 @@ gene_go <- filtered_go_res@result %>%
 
 gene_go <- gene_go[!grepl("peripheral nervous system development", gene_go$go_term), ]
 gene_go <- gene_go[!grepl("sympathetic", gene_go$go_term), ]
-
-gene_go <- gene_go %>%
-  filter(!(go_term == "regulation of peptidase activity" & !(gene %in% c(
-  "Lgals3", "Thbs2", "Postn", "Cbln1", "Srpx2", "Hapln1", "Lgi2", "Plxna4", "Plxnb1",
-  "Serpina3n", "Thbs1", "Lgals9", "Lama5", "Fn1", "Lamb2", "Hspg2", "Tgm2", "Dcn", "Cxcl12", "S100a9"
-))))
 
 genes_sci <- unique(gene_go$gene)
 
@@ -628,7 +612,7 @@ go_res <- enrichGO(
     pAdjustMethod = "fdr")
 
 # Filter the GO terms from the enrichGO object directly
-pattern <- "nervous system|nervous system process|regulation of apoptotic signaling pathway|axogenesis|neuron|neurogenesis|axon|spinal|synapse|chronic|long-term|plasticity|regulation of autophagy|regulation of inflammatory response|metallopeptidase|^regulation of peptidase activity$|Wnt|Notch|phosphatidylinositol|MAPK|NF-kappaB|BMP|STAT|SMAD|toll-like|Rho|tumor necrosis factor"
+pattern <- "nervous system|nervous system process|regulation of apoptotic signaling pathway|axogenesis|neuron|neurogenesis|axon|spinal|synapse|chronic|long-term|plasticity|regulation of autophagy|regulation of inflammatory response|metallopeptidase|^regulation of peptidase activity$|^regulation of reactive oxygen species metabolic process$|neuroinflammatory|Wnt|Notch|phosphatidylinositol|MAPK|NF-kappaB|BMP|STAT|SMAD|toll-like|Rho|tumor necrosis factor"
 filtered_go_res <- go_res
 filtered_go_res@result <- filtered_go_res@result %>%
   filter(p.adjust < 0.1) %>%
@@ -652,12 +636,6 @@ gene_go <- gene_go[!grepl("presynapse", gene_go$go_term), ]
 gene_go <- gene_go[!grepl("postsynapse", gene_go$go_term), ]
 gene_go <- gene_go[!grepl("sympathetic", gene_go$go_term), ]
 gene_go <- gene_go[!grepl("neuron projection extension involved in neuron projection guidance", gene_go$go_term), ]
-
-gene_go <- gene_go %>%
-  filter(!(go_term == "regulation of peptidase activity" & !(gene %in% c(
-  "Lgals3", "Thbs2", "Postn", "Cbln1", "Srpx2", "Hapln1", "Lgi2", "Plxna4", "Plxnb1",
-  "Serpina3n", "Thbs1", "Lgals9", "Lama5", "Fn1", "Lamb2", "Hspg2", "Tgm2", "Dcn", "Cxcl12", "S100a9"
-))))
 
 signaling_pathways <- list(
   `TGF-B Signaling` = c(
@@ -983,7 +961,7 @@ draw(hm_binary_signaling + hm_count_signaling + hm_pval_signaling, annotation_le
 dev.off()
 
 # Non-signaling
-png("~/R/Figures2/Enrichment_NonSignaling_Chronic.png", width = 4200, height = 2800, res = 650)
+png("~/R/Figures2/Enrichment_NonSignaling_Chronic.png", width = 4400, height = 2800, res = 650)
 draw(hm_binary_non_signaling + hm_count_non_signaling + hm_pval_non_signaling, annotation_legend_list = list(regulation_legend))
 dev.off()
 

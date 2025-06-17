@@ -28,56 +28,61 @@ seurat_integrated_ME <- readRDS("~/R/Downloads/Seurat_Integrated_ME.rds")
 Idents(seurat_integrated_ME) <- "time"
 
 astro <- subset(seurat_integrated_ME, subset = celltype == "Astrocytes")
-DEG_astro <- FindMarkers(astro, ident.1 = "7dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latens.vars = c("nCount_RNA", "dataset"))
+DEG_astro <- FindMarkers(astro, ident.1 = "7dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
 DEG_astro$Gene <- rownames(DEG_astro)
 DEG_astro$celltype <- "Astrocytes"
 
 neuron <- subset(seurat_integrated_ME, subset = celltype == "Neurons")
-DEG_neuron <- FindMarkers(neuron, ident.1 = "7dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST",latens.vars = c("nCount_RNA", "dataset"))
+DEG_neuron <- FindMarkers(neuron, ident.1 = "7dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
 DEG_neuron$Gene <- rownames(DEG_neuron)
 DEG_neuron$celltype <- "Neurons"
 
 microglia <- subset(seurat_integrated_ME, subset = celltype == "Microglia")
-DEG_microglia <- FindMarkers(microglia, ident.1 = "7dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST",latens.vars = c("nCount_RNA", "dataset"))
+DEG_microglia <- FindMarkers(microglia, ident.1 = "7dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
 DEG_microglia$Gene <- rownames(DEG_microglia)
 DEG_microglia$celltype <- "Microglia"
 
 opc <- subset(seurat_integrated_ME, subset = celltype == "OPCs")
-DEG_opc <- FindMarkers(opc, ident.1 = "7dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST",latens.vars = c("nCount_RNA", "dataset"))
+DEG_opc <- FindMarkers(opc, ident.1 = "7dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
 DEG_opc$Gene <- rownames(DEG_opc)
 DEG_opc$celltype <- "OPCs"
 
 ependymal <- subset(seurat_integrated_ME, subset = celltype == "Ependymal cells")
-DEG_ependymal <- FindMarkers(ependymal, ident.1 = "7dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST",latens.vars = c("nCount_RNA", "dataset"))
+DEG_ependymal <- FindMarkers(ependymal, ident.1 = "7dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
 DEG_ependymal$Gene <- rownames(DEG_ependymal)
 DEG_ependymal$celltype <- "Ependymal cells"
 
 endo <- subset(seurat_integrated_ME, subset = celltype == "Endothelial cells")
-DEG_endo <- FindMarkers(endo, ident.1 = "7dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST",latens.vars = c("nCount_RNA", "dataset"))
+DEG_endo <- FindMarkers(endo, ident.1 = "7dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
 DEG_endo$Gene <- rownames(DEG_endo)
 DEG_endo$celltype <- "Endothelial cells"
 
 vascular <- subset(seurat_integrated_ME, subset = celltype == "Vascular cells")
-DEG_vascular <- FindMarkers(vascular, ident.1 = "7dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST",latens.vars = c("nCount_RNA", "dataset"))
+DEG_vascular <- FindMarkers(vascular, ident.1 = "7dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
 DEG_vascular$Gene <- rownames(DEG_vascular)
 DEG_vascular$celltype <- "Vascular cells"
 
 immune <- subset(seurat_integrated_ME, subset = celltype == "Immune cells")
-DEG_immune<- FindMarkers(immune, ident.1 = "7dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST",latens.vars = c("nCount_RNA", "dataset"))
+DEG_immune<- FindMarkers(immune, ident.1 = "7dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
 DEG_immune$Gene <- rownames(DEG_immune)
 DEG_immune$celltype <- "Immune cells"
 
 oligodendrocyte <- subset(seurat_integrated_ME, subset = celltype == "Oligodendrocytes")
-DEG_oligodendrocyte <- FindMarkers(oligodendrocyte, ident.1 = "7dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST",latens.vars = c("nCount_RNA", "dataset"))
+DEG_oligodendrocyte <- FindMarkers(oligodendrocyte, ident.1 = "7dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
 DEG_oligodendrocyte$Gene <- rownames(DEG_oligodendrocyte)
 DEG_oligodendrocyte$celltype <- "Oligodendrocytes"
 
 myeloid <- subset(seurat_integrated_ME, subset = celltype == "Myeloid")
-DEG_myeloid <- FindMarkers(myeloid, ident.1 = "7dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST",latens.vars = c("nCount_RNA", "dataset"))
-DEG_myeloid$Gene <- rownames(DEG_myeloid)
-DEG_myeloid$celltype <- "Myeloid"
+DEG_myeloid  <- FindMarkers(myeloid, ident.1 = "7dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
+DEG_myeloid $Gene <- rownames(DEG_myeloid )
+DEG_myeloid $celltype <- "Myeloid"
 
-combined_results <- bind_rows(DEG_astro, DEG_neuron, DEG_microglia, DEG_opc, DEG_oligodendrocyte, DEG_immune, DEG_vascular, DEG_ependymal, DEG_endo, DEG_myeloid)
+newly <- subset(seurat_integrated_ME, subset = celltype == "Newly formed oligodendrocytes")
+DEG_newly  <- FindMarkers(newly, ident.1 = "7dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
+DEG_newly$Gene <- rownames(DEG_newly)
+DEG_newly$celltype <- "Newly formed oligodendrocytes"
+
+combined_results <- bind_rows(DEG_astro, DEG_neuron, DEG_microglia, DEG_opc, DEG_oligodendrocyte, DEG_immune, DEG_vascular, DEG_ependymal, DEG_endo, DEG_myeloid, DEG_newly)
 
 combined_results$time <- "7 dpi"
 
@@ -90,56 +95,61 @@ write.xlsx(combined_results, "~/R/Data/DEG_Celltype_7dpi.xlsx")
 Idents(seurat_integrated_ME) <- "time"
 
 astro <- subset(seurat_integrated_ME, subset = celltype == "Astrocytes")
-DEG_astro <- FindMarkers(astro, ident.1 = "4-6 wpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST",latens.vars = c("nCount_RNA", "dataset"))
+DEG_astro <- FindMarkers(astro, ident.1 = "4-6 wpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
 DEG_astro$Gene <- rownames(DEG_astro)
 DEG_astro$celltype <- "Astrocytes"
 
 neuron <- subset(seurat_integrated_ME, subset = celltype == "Neurons")
-DEG_neuron <- FindMarkers(neuron, ident.1 = "4-6 wpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST",latens.vars = c("nCount_RNA", "dataset"))
+DEG_neuron <- FindMarkers(neuron, ident.1 = "4-6 wpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
 DEG_neuron$Gene <- rownames(DEG_neuron)
 DEG_neuron$celltype <- "Neurons"
 
 microglia <- subset(seurat_integrated_ME, subset = celltype == "Microglia")
-DEG_microglia <- FindMarkers(microglia, ident.1 = "4-6 wpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST",latens.vars = c("nCount_RNA", "dataset"))
+DEG_microglia <- FindMarkers(microglia, ident.1 = "4-6 wpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
 DEG_microglia$Gene <- rownames(DEG_microglia)
 DEG_microglia$celltype <- "Microglia"
 
 opc <- subset(seurat_integrated_ME, subset = celltype == "OPCs")
-DEG_opc <- FindMarkers(opc, ident.1 = "4-6 wpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST",latens.vars = c("nCount_RNA", "dataset"))
+DEG_opc <- FindMarkers(opc, ident.1 = "4-6 wpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
 DEG_opc$Gene <- rownames(DEG_opc)
 DEG_opc$celltype <- "OPCs"
 
 ependymal <- subset(seurat_integrated_ME, subset = celltype == "Ependymal cells")
-DEG_ependymal <- FindMarkers(ependymal, ident.1 = "4-6 wpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST",latens.vars = c("nCount_RNA", "dataset"))
+DEG_ependymal <- FindMarkers(ependymal, ident.1 = "4-6 wpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
 DEG_ependymal$Gene <- rownames(DEG_ependymal)
 DEG_ependymal$celltype <- "Ependymal cells"
 
 endo <- subset(seurat_integrated_ME, subset = celltype == "Endothelial cells")
-DEG_endo <- FindMarkers(endo, ident.1 = "4-6 wpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST",latens.vars = c("nCount_RNA", "dataset"))
+DEG_endo <- FindMarkers(endo, ident.1 = "4-6 wpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
 DEG_endo$Gene <- rownames(DEG_endo)
 DEG_endo$celltype <- "Endothelial cells"
 
 vascular <- subset(seurat_integrated_ME, subset = celltype == "Vascular cells")
-DEG_vascular <- FindMarkers(vascular, ident.1 = "4-6 wpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST",latens.vars = c("nCount_RNA", "dataset"))
+DEG_vascular <- FindMarkers(vascular, ident.1 = "4-6 wpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
 DEG_vascular$Gene <- rownames(DEG_vascular)
 DEG_vascular$celltype <- "Vascular cells"
 
 immune <- subset(seurat_integrated_ME, subset = celltype == "Immune cells")
-DEG_immune<- FindMarkers(immune, ident.1 = "4-6 wpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST",latens.vars = c("nCount_RNA", "dataset"))
+DEG_immune<- FindMarkers(immune, ident.1 = "4-6 wpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
 DEG_immune$Gene <- rownames(DEG_immune)
 DEG_immune$celltype <- "Immune cells"
 
 oligodendrocyte <- subset(seurat_integrated_ME, subset = celltype == "Oligodendrocytes")
-DEG_oligodendrocyte <- FindMarkers(oligodendrocyte, ident.1 = "4-6 wpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST",latens.vars = c("nCount_RNA", "dataset"))
+DEG_oligodendrocyte <- FindMarkers(oligodendrocyte, ident.1 = "4-6 wpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
 DEG_oligodendrocyte$Gene <- rownames(DEG_oligodendrocyte)
 DEG_oligodendrocyte$celltype <- "Oligodendrocytes"
 
 myeloid <- subset(seurat_integrated_ME, subset = celltype == "Myeloid")
-DEG_myeloid <- FindMarkers(myeloid, ident.1 = "4-6 wpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST",latens.vars = c("nCount_RNA", "dataset"))
-DEG_myeloid$Gene <- rownames(DEG_myeloid)
-DEG_myeloid$celltype <- "Myeloid"
+DEG_myeloid  <- FindMarkers(myeloid, ident.1 = "4-6 wpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
+DEG_myeloid $Gene <- rownames(DEG_myeloid )
+DEG_myeloid $celltype <- "Myeloid"
 
-combined_results <- bind_rows(DEG_astro, DEG_neuron, DEG_microglia, DEG_opc, DEG_oligodendrocyte, DEG_immune, DEG_vascular, DEG_ependymal, DEG_endo, DEG_myeloid)
+newly <- subset(seurat_integrated_ME, subset = celltype == "Newly formed oligodendrocytes")
+DEG_newly  <- FindMarkers(newly, ident.1 = "4-6 wpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
+DEG_newly$Gene <- rownames(DEG_newly)
+DEG_newly$celltype <- "Newly formed oligodendrocytes"
+
+combined_results <- bind_rows(DEG_astro, DEG_neuron, DEG_microglia, DEG_opc, DEG_oligodendrocyte, DEG_immune, DEG_vascular, DEG_ependymal, DEG_endo, DEG_myeloid, DEG_newly)
 
 combined_results$time <- "4-6 wpi"
 
@@ -153,56 +163,61 @@ Data for other time points - At cell type level
 Idents(seurat_integrated_ME) <- "time"
 
 astro <- subset(seurat_integrated_ME, subset = celltype == "Astrocytes")
-DEG_astro <- FindMarkers(astro, ident.1 = "1dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST",latens.vars = c("nCount_RNA", "dataset"))
+DEG_astro <- FindMarkers(astro, ident.1 = "1dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
 DEG_astro$Gene <- rownames(DEG_astro)
 DEG_astro$celltype <- "Astrocytes"
 
 neuron <- subset(seurat_integrated_ME, subset = celltype == "Neurons")
-DEG_neuron <- FindMarkers(neuron, ident.1 = "1dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST",latens.vars = c("nCount_RNA", "dataset"))
+DEG_neuron <- FindMarkers(neuron, ident.1 = "1dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
 DEG_neuron$Gene <- rownames(DEG_neuron)
 DEG_neuron$celltype <- "Neurons"
 
 microglia <- subset(seurat_integrated_ME, subset = celltype == "Microglia")
-DEG_microglia <- FindMarkers(microglia, ident.1 = "1dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST",latens.vars = c("nCount_RNA", "dataset"))
+DEG_microglia <- FindMarkers(microglia, ident.1 = "1dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
 DEG_microglia$Gene <- rownames(DEG_microglia)
 DEG_microglia$celltype <- "Microglia"
 
 opc <- subset(seurat_integrated_ME, subset = celltype == "OPCs")
-DEG_opc <- FindMarkers(opc, ident.1 = "1dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST",latens.vars = c("nCount_RNA", "dataset"))
+DEG_opc <- FindMarkers(opc, ident.1 = "1dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
 DEG_opc$Gene <- rownames(DEG_opc)
 DEG_opc$celltype <- "OPCs"
 
 ependymal <- subset(seurat_integrated_ME, subset = celltype == "Ependymal cells")
-DEG_ependymal <- FindMarkers(ependymal, ident.1 = "1dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST",latens.vars = c("nCount_RNA", "dataset"))
+DEG_ependymal <- FindMarkers(ependymal, ident.1 = "1dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
 DEG_ependymal$Gene <- rownames(DEG_ependymal)
 DEG_ependymal$celltype <- "Ependymal cells"
 
 endo <- subset(seurat_integrated_ME, subset = celltype == "Endothelial cells")
-DEG_endo <- FindMarkers(endo, ident.1 = "1dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST",latens.vars = c("nCount_RNA", "dataset"))
+DEG_endo <- FindMarkers(endo, ident.1 = "1dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
 DEG_endo$Gene <- rownames(DEG_endo)
 DEG_endo$celltype <- "Endothelial cells"
 
 vascular <- subset(seurat_integrated_ME, subset = celltype == "Vascular cells")
-DEG_vascular <- FindMarkers(vascular, ident.1 = "1dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST",latens.vars = c("nCount_RNA", "dataset"))
+DEG_vascular <- FindMarkers(vascular, ident.1 = "1dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
 DEG_vascular$Gene <- rownames(DEG_vascular)
 DEG_vascular$celltype <- "Vascular cells"
 
 immune <- subset(seurat_integrated_ME, subset = celltype == "Immune cells")
-DEG_immune<- FindMarkers(immune, ident.1 = "1dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST",latens.vars = c("nCount_RNA", "dataset"))
+DEG_immune<- FindMarkers(immune, ident.1 = "1dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
 DEG_immune$Gene <- rownames(DEG_immune)
 DEG_immune$celltype <- "Immune cells"
 
 oligodendrocyte <- subset(seurat_integrated_ME, subset = celltype == "Oligodendrocytes")
-DEG_oligodendrocyte <- FindMarkers(oligodendrocyte, ident.1 = "1dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST",latens.vars = c("nCount_RNA", "dataset"))
+DEG_oligodendrocyte <- FindMarkers(oligodendrocyte, ident.1 = "1dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
 DEG_oligodendrocyte$Gene <- rownames(DEG_oligodendrocyte)
 DEG_oligodendrocyte$celltype <- "Oligodendrocytes"
 
 myeloid <- subset(seurat_integrated_ME, subset = celltype == "Myeloid")
-DEG_myeloid <- FindMarkers(myeloid, ident.1 = "1dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST",latens.vars = c("nCount_RNA", "dataset"))
-DEG_myeloid$Gene <- rownames(DEG_myeloid)
-DEG_myeloid$celltype <- "Myeloid"
+DEG_myeloid  <- FindMarkers(myeloid, ident.1 = "1dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
+DEG_myeloid $Gene <- rownames(DEG_myeloid )
+DEG_myeloid $celltype <- "Myeloid"
 
-combined_results <- bind_rows(DEG_astro, DEG_neuron, DEG_microglia, DEG_opc, DEG_oligodendrocyte, DEG_immune, DEG_vascular, DEG_ependymal, DEG_endo, DEG_myeloid)
+newly <- subset(seurat_integrated_ME, subset = celltype == "Newly formed oligodendrocytes")
+DEG_newly  <- FindMarkers(newly, ident.1 = "1dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
+DEG_newly$Gene <- rownames(DEG_newly)
+DEG_newly$celltype <- "Newly formed oligodendrocytes"
+
+combined_results <- bind_rows(DEG_astro, DEG_neuron, DEG_microglia, DEG_opc, DEG_oligodendrocyte, DEG_immune, DEG_vascular, DEG_ependymal, DEG_endo, DEG_myeloid, DEG_newly)
 
 combined_results$time <- "1 dpi"
 
@@ -214,56 +229,61 @@ write.xlsx(combined_results, "~/R/Data/DEG_Celltype_1dpi.xlsx")
 Idents(seurat_integrated_ME) <- "time"
 
 astro <- subset(seurat_integrated_ME, subset = celltype == "Astrocytes")
-DEG_astro <- FindMarkers(astro, ident.1 = "21 dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST",latens.vars = c("nCount_RNA", "dataset"))
+DEG_astro <- FindMarkers(astro, ident.1 = "21 dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
 DEG_astro$Gene <- rownames(DEG_astro)
 DEG_astro$celltype <- "Astrocytes"
 
 neuron <- subset(seurat_integrated_ME, subset = celltype == "Neurons")
-DEG_neuron <- FindMarkers(neuron, ident.1 = "21 dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST",latens.vars = c("nCount_RNA", "dataset"))
+DEG_neuron <- FindMarkers(neuron, ident.1 = "21 dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
 DEG_neuron$Gene <- rownames(DEG_neuron)
 DEG_neuron$celltype <- "Neurons"
 
 microglia <- subset(seurat_integrated_ME, subset = celltype == "Microglia")
-DEG_microglia <- FindMarkers(microglia, ident.1 = "21 dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST",latens.vars = c("nCount_RNA", "dataset"))
+DEG_microglia <- FindMarkers(microglia, ident.1 = "21 dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
 DEG_microglia$Gene <- rownames(DEG_microglia)
 DEG_microglia$celltype <- "Microglia"
 
 opc <- subset(seurat_integrated_ME, subset = celltype == "OPCs")
-DEG_opc <- FindMarkers(opc, ident.1 = "21 dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST",latens.vars = c("nCount_RNA", "dataset"))
+DEG_opc <- FindMarkers(opc, ident.1 = "21 dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
 DEG_opc$Gene <- rownames(DEG_opc)
 DEG_opc$celltype <- "OPCs"
 
 ependymal <- subset(seurat_integrated_ME, subset = celltype == "Ependymal cells")
-DEG_ependymal <- FindMarkers(ependymal, ident.1 = "21 dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST",latens.vars = c("nCount_RNA", "dataset"))
+DEG_ependymal <- FindMarkers(ependymal, ident.1 = "21 dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
 DEG_ependymal$Gene <- rownames(DEG_ependymal)
 DEG_ependymal$celltype <- "Ependymal cells"
 
 endo <- subset(seurat_integrated_ME, subset = celltype == "Endothelial cells")
-DEG_endo <- FindMarkers(endo, ident.1 = "21 dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST",latens.vars = c("nCount_RNA", "dataset"))
+DEG_endo <- FindMarkers(endo, ident.1 = "21 dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
 DEG_endo$Gene <- rownames(DEG_endo)
 DEG_endo$celltype <- "Endothelial cells"
 
 vascular <- subset(seurat_integrated_ME, subset = celltype == "Vascular cells")
-DEG_vascular <- FindMarkers(vascular, ident.1 = "21 dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST",latens.vars = c("nCount_RNA", "dataset"))
+DEG_vascular <- FindMarkers(vascular, ident.1 = "21 dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
 DEG_vascular$Gene <- rownames(DEG_vascular)
 DEG_vascular$celltype <- "Vascular cells"
 
 immune <- subset(seurat_integrated_ME, subset = celltype == "Immune cells")
-DEG_immune<- FindMarkers(immune, ident.1 = "21 dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST",latens.vars = c("nCount_RNA", "dataset"))
+DEG_immune<- FindMarkers(immune, ident.1 = "21 dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
 DEG_immune$Gene <- rownames(DEG_immune)
 DEG_immune$celltype <- "Immune cells"
 
 oligodendrocyte <- subset(seurat_integrated_ME, subset = celltype == "Oligodendrocytes")
-DEG_oligodendrocyte <- FindMarkers(oligodendrocyte, ident.1 = "21 dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST",latens.vars = c("nCount_RNA", "dataset"))
+DEG_oligodendrocyte <- FindMarkers(oligodendrocyte, ident.1 = "21 dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
 DEG_oligodendrocyte$Gene <- rownames(DEG_oligodendrocyte)
 DEG_oligodendrocyte$celltype <- "Oligodendrocytes"
 
 myeloid <- subset(seurat_integrated_ME, subset = celltype == "Myeloid")
-DEG_myeloid <- FindMarkers(myeloid, ident.1 = "21 dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST",latens.vars = c("nCount_RNA", "dataset"))
+DEG_myeloid <- FindMarkers(myeloid, ident.1 = "21 dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
 DEG_myeloid$Gene <- rownames(DEG_myeloid)
 DEG_myeloid$celltype <- "Myeloid"
 
-combined_results <- bind_rows(DEG_astro, DEG_neuron, DEG_microglia, DEG_opc, DEG_oligodendrocyte, DEG_immune, DEG_vascular, DEG_ependymal, DEG_endo, DEG_myeloid)
+newly <- subset(seurat_integrated_ME, subset = celltype == "Newly formed oligodendrocytes")
+DEG_newly  <- FindMarkers(newly, ident.1 = "21 dpi", ident.2 = "Uninjured", logfc.threshold = 0, min.pct = 0.05, test.use = "MAST", latent.vars = c("nCount_RNA", "dataset"))
+DEG_newly$Gene <- rownames(DEG_newly)
+DEG_newly$celltype <- "Newly formed oligodendrocytes"
+
+combined_results <- bind_rows(DEG_astro, DEG_neuron, DEG_microglia, DEG_opc, DEG_oligodendrocyte, DEG_immune, DEG_vascular, DEG_ependymal, DEG_endo, DEG_myeloid, DEG_newly)
 
 combined_results$time <- "21 dpi"
 

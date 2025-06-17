@@ -1,0 +1,153 @@
+---
+title: "Untitled"
+output: html_document
+date: "2025-06-13"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Load required packages
+library(httr)
+library(jsonlite)
+library(dplyr)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+# Biomarkers
+gene_name <- toupper(as.vector(readRDS("~/R/Downloads/Important_Genes.rds")))
+```
+
+```{r}
+
+query <- '{
+  genes(names: ["LGALS3", "TNC", "THBS2", "POSTN", "SERPINA3", "SRPX2", "C1QA", "C1QB", "C1QC", "HAPLN2", "LGI1","SPOCK3", "TIMP1","PLXNA4","CXCL12","COL3A1"]) {
+    nodes {
+      name
+      interactions {
+        drug {
+          name
+          conceptId
+        }
+        interactionScore
+        interactionTypes {
+          type
+          directionality
+        }
+        interactionAttributes {
+          name
+          value
+        }
+        publications {
+          pmid
+        }
+        sources {
+          sourceDbName
+        }
+      }
+    }
+  }
+}'
+
+
+url <- "https://dgidb.org/api/graphql"
+
+res <- POST(
+  url,
+  body = list(query = query),
+  encode = "json",
+  content_type_json()
+)
+
+# Verifica si la respuesta es correcta
+if (status_code(res) == 200) {
+  data <- content(res, as = "parsed", simplifyVector = TRUE)
+  print(data)
+} else {
+  print(paste("Error:", status_code(res)))
+}
+
+order_genes = data[["data"]][["genes"]][["nodes"]][["name"]]
+
+info1 <- data[["data"]][["genes"]][["nodes"]][["interactions"]][[1]]
+info1$Gene <- "Postn"
+
+info2 <- data[["data"]][["genes"]][["nodes"]][["interactions"]][[2]]
+
+info3 <- data[["data"]][["genes"]][["nodes"]][["interactions"]][[3]]
+info3$Gene <- "Col3a1"
+  
+info4 <- data[["data"]][["genes"]][["nodes"]][["interactions"]][[4]]
+info4$Gene <- "Cxcl12"
+
+info7 <- data[["data"]][["genes"]][["nodes"]][["interactions"]][[7]]
+info7$Gene <- "C1qc"
+
+info10 <- data[["data"]][["genes"]][["nodes"]][["interactions"]][[10]]
+info10$Gene <- "C1qa"
+
+info11 <- data[["data"]][["genes"]][["nodes"]][["interactions"]][[11]]
+info11$Gene <- "Thbs2"
+
+info13 <- data[["data"]][["genes"]][["nodes"]][["interactions"]][[13]]
+info13$Gene <- "Tnc"
+
+info14 <- data[["data"]][["genes"]][["nodes"]][["interactions"]][[14]]
+info14$Gene <- "Lgals3"
+
+info15 <- data[["data"]][["genes"]][["nodes"]][["interactions"]][[15]]
+info15$Gene <- "Serpina3"
+
+drug_results <- bind_rows(info1, info3, info4, info7, info10, info11, info13, info14, info15)
+
+drug_results_expanded <- drug_results %>%
+  unnest_wider(interactionTypes, names_sep = "_") %>%
+  unnest_wider(interactionAttributes, names_sep = "_") %>%
+  unnest_wider(publications, names_sep = "_") %>%
+  unnest_wider(sources, names_sep = "_")
+
+drug_results_expanded <- drug_results_expanded %>%
+  dplyr::filter(!is.na(interactionTypes_directionality) & interactionTypes_directionality != "")
+
+drug_results_expanded <- drug_results_expanded %>%
+  dplyr::filter(interactionScore > 0.5)
+
+colnames(drug_results_expanded)[colnames(drug_results_expanded) == "drug"] <- "Drug_Name"
+
+
+```
+
+```{r}
+summary_df <- drug_results_expanded %>%
+  group_by(Gene, interactionTypes_directionality) %>%
+  summarise(num_drugs = n_distinct(Drug_Name)) %>%
+  ungroup()
+
+drugs <- ggplot(summary_df, aes(x = Gene, y = num_drugs, fill = interactionTypes_directionality)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = c("tomato", "steelblue")) +
+  labs(title = "Drugs for therapeutic targets",
+       x = "Gene",
+       y = "Number of drugs",
+       fill = "Interaction Type") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 12),
+    axis.text.y = element_text(size = 12),
+    axis.title = element_text(size = 14),
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 16),
+    legend.text = element_text(size = 12),
+    legend.title = element_text(size = 13)
+  )
+drug_results_expanded <- drug_results_expanded %>%
+  dplyr::select(matches("Gene|Drug_Name|interactionTypes_directionality"))
+
+drug_results_expanded
+
+ggsave("~/R/Figures2/Drugs.png", drugs, dpi = 320, width = 8, height = 6)
+
+```
+

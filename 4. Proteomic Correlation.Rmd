@@ -29,6 +29,9 @@ transcriptomic <-  transcriptomic %>%
 
 proteomic <- read_excel("~/R/Data/MAIN_ECM_Proteome.xlsx")
 
+proteomic <- proteomic %>% 
+  filter(Gene %in% interest_genes)
+
 # CORRELATION 
 transcriptomic <- transcriptomic [, c("Gene", "avg_log2FC","p_val_adj")]
 
@@ -70,6 +73,9 @@ transcriptomic <-  transcriptomic %>%
 
 proteomic <- read_excel("~/R/Data/MAIN_ECM_Proteome.xlsx")
 
+proteomic <- proteomic %>% 
+  filter(Gene %in% interest_genes)
+
 # CORRELATION
 transcriptomic <- transcriptomic [, c("Gene", "avg_log2FC","p_val_adj")]
 
@@ -102,17 +108,11 @@ correlation_table2 <- correlation_table %>%
 
 ```{r}
 # Acute
-correlation_table1 <- correlation_table1 %>% 
-  filter(p_value_Transcriptomics < 0.05)
-
 prefix <- "Acute_"
 
 colnames(correlation_table1) <- sapply(colnames(correlation_table1), function(x) ifelse(x != "Gene", paste0(prefix, x), x))
 
 # Sub-Chronic
-correlation_table2 <- correlation_table2 %>% 
-  filter(p_value_Transcriptomics < 0.05)
-
 prefix <- "SubChronic_"
 
 colnames(correlation_table2) <- sapply(colnames(correlation_table2), function(x) ifelse(x != "Gene", paste0(prefix, x), x))
@@ -121,10 +121,10 @@ colnames(correlation_table2) <- sapply(colnames(correlation_table2), function(x)
 correlation_table <- merge(correlation_table1, correlation_table2, by = "Gene")
 
 correlation_table <- correlation_table %>% 
-  select(matches("Gene|^Acute|^Sub"))
+  dplyr::select(matches("Gene|^Acute|^Sub"))
 
 correlation_table <- correlation_table %>% 
-  select(matches("Gene|Transcriptomics$|Proteomics$"))
+  dplyr::select(matches("Gene|Transcriptomics$|Proteomics$"))
 
 delete_cols <- grep("^\\w+_p_value_\\w+$", colnames(correlation_table), value = TRUE)
 
@@ -155,28 +155,88 @@ long_data <- long_data %>%
 
 saveRDS(long_data, file = "~/R/Downloads/Data_Omics.rds")
 
-layout_proteomica <- ggplot(long_data, aes(x = Condition, y = log2FC, color = Type, group = Type)) +
+
+```
+
+```{r}
+acute_markers <- readRDS("~/R/Downloads/Genes_Acute.rds")
+
+long_data_early <- long_data %>%
+  filter(Gene %in% acute_markers)
+
+subchronic_markers <- readRDS("~/R/Downloads/Genes_Subchronic.rds")
+
+long_data_late <- long_data %>%
+  filter(Gene %in% subchronic_markers)
+```
+
+ALL ACUTE AND SUB-CHRONIC MARKERS
+
+```{r}
+color_pal <- c("Transcriptomics" = "tomato", "Proteomics" = "steelblue")
+
+# Acute candidate markers
+layout_proteomica_early <- ggplot(long_data_early, aes(x = Condition, y = log2FC, color = Type, group = Type)) +
   geom_line() +
   geom_point() + 
+  scale_color_manual(values = color_pal) +
   facet_wrap(~ Gene, scales = "free_y") +
   labs(
-    title = "Proteomics vs Transcriptomics Comparison",
+    title = "Comparison of Transcriptomic and Proteomic Profiles - Acute Biomarkers",
     x = "Condition", 
     y = "log2 Fold Change",
     color = "Data Type"
   ) +
   theme_minimal(base_family = "sans") +
   theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    axis.text.y = element_text(size = 5),
-    legend.position = "right"
-  )
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+    axis.text.y = element_text(size = 10.5),
+    legend.position = "right",
+    legent.text = element_text(size = 12),
+    strip.text = element_text(size = 14),
+    plot.title = element_text(face = "bold", size = 16, hjust = 0.5)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "tomato") 
+  
+layout_proteomica_early <- layout_proteomica_early 
 
-layout_proteomica
+ggsave("~/R/Figures2/Layout Proteomics-Transcriptomics Acute Markers.png", layout_proteomica_early, dpi = 320, height = 10, width = 14)
 
-ggsave("~/R/Figures2/Layout Proteomics-Transcriptomics.png", layout_proteomica, dpi = 1080, height = 7, width = 9)
+# Subchronic candidate markers
+layout_proteomica_late <- ggplot(long_data_late, aes(x = Condition, y = log2FC, color = Type, group = Type)) +
+  geom_line() +
+  geom_point() + 
+  scale_color_manual(values = color_pal) +
+  facet_wrap(~ Gene, scales = "free_y") +
+  labs(
+    title = "Comparison of Transcriptomic and Proteomic Profiles - Sub-Chronic Biomarkers",
+    x = "Condition", 
+    y = "log2 Fold Change",
+    color = "Data Type"
+  ) +
+  theme_minimal(base_family = "sans") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 10),
+    axis.text.y = element_text(size = 10.5),
+    legend.position = "right",
+    legent.text = element_text(size = 12),
+    strip.text = element_text(size = 14),
+    plot.title = element_text(face = "bold", size = 16, hjust = 0.5))  +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "tomato")
+  
+layout_proteomica_late <- layout_proteomica_late
 
+ggsave("~/R/Figures2/Layout Proteomics-Transcriptomics Subchronic Markers.png", layout_proteomica_late, dpi = 320, height = 10, width = 14)
 
+general_layout <- layout_proteomica_early / layout_proteomica_late
+general_layout
+
+ggsave("~/R/Figures2/Layout Proteomics-Transcriptomics General Layout.png", general_layout, dpi = 320, height = 20, width = 14)
+
+```
+
+SPECIFIC PER CORRELATION WITH PROTEOMICS
+
+```{r}
 # Classification by correlation at different times
 wide_data <- long_data %>%
   pivot_wider(names_from = Type, values_from = log2FC) %>%
@@ -186,14 +246,14 @@ wide_data <- long_data %>%
   ) %>%
   mutate(
     sign_match = case_when(
-      transcript > 0 & protein > 0 ~ "pos",
-      transcript < 0 & protein < 0 ~ "neg",
+      transcript > 0.585 & protein > 0.585 ~ "pos",
+      transcript < -0.585 & protein < -0.585 ~ "neg",
       TRUE ~ "no"
     )
   )
 
 gene_class <- wide_data %>%
-  select(Gene, Condition, sign_match) %>%
+  dplyr::select(Gene, Condition, sign_match) %>%
   pivot_wider(names_from = Condition, values_from = sign_match) %>%
   mutate(
     correlation_group = case_when(
@@ -203,7 +263,7 @@ gene_class <- wide_data %>%
       TRUE ~ "no correlation"
     )
   ) %>%
-  select(Gene, correlation_group)
+  dplyr::select(Gene, correlation_group)
 
 # Add classification
 long_data_with_group <- long_data %>%
@@ -215,128 +275,131 @@ long_data_no <- long_data_with_group %>%
 
 # Acute
 long_data_acute <- long_data_with_group %>%
-  filter(correlation_group == "correlation in 7 dpi")
+  filter(correlation_group == "correlation in 7 dpi") %>%
+  filter(Gene %in% acute_markers)
 
 # Chronic
 long_data_chronic <- long_data_with_group %>%
-  filter(correlation_group == "correlation in 4-6 wpi")
+  filter(correlation_group == "correlation in 4-6 wpi")  %>%
+  filter(Gene %in% subchronic_markers)
 
 # Both
 long_data_both <- long_data_with_group %>%
   filter(correlation_group == "correlation in both")
 
-# Acute
-layout_proteomica_acute <- ggplot(long_data_acute, aes(x = Condition, y = log2FC, color = Type, group = Type)) +
-  geom_line() +
-  geom_point() + 
-  facet_wrap(~ Gene, scales = "free_y") +
+long_data_acute$Type <- factor(long_data_acute$Type, levels = c("Transcriptomics", "Proteomics"))
+long_data_chronic$Type <- factor(long_data_chronic$Type, levels = c("Transcriptomics", "Proteomics"))
+long_data_both$Type <- factor(long_data_both$Type, levels = c("Transcriptomics", "Proteomics"))
+
+```
+
+```{r}
+# Visualization
+
+# Custom color palette
+color_pal <- c("Transcriptomics" = "tomato", "Proteomics" = "steelblue")
+
+# -------------------------------
+# ACUTE 
+# -------------------------------
+long_data_acute$Gene <- factor(long_data_acute$Gene, levels = c("C1qa","C1qb","C1qc","Col3a1","Cxcl12","Hapln2","Lgi1","Spock3"))
+
+layout_proteomica_acute <- ggplot(long_data_acute %>% filter(Condition == "7 dpi"),
+                                  aes(x = Gene, y = log2FC, fill = Type)) +
+  geom_col(position = "dodge") +
+  scale_fill_manual(values = color_pal) +
   labs(
-    title = "Proteomics vs Transcriptomics Comparison",
-    x = "Condition", 
-    y = "log2 Fold Change",
-    color = "Data Type"
+    title = "Transcriptomic and Proteomic Profiles - Acute Dysregulation",
+    x = "Gene", y = "log2 Fold Change", fill = "Data Type"
   ) +
   theme_minimal(base_family = "sans") +
   theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    axis.text.y = element_text(size = 5),
-    legend.position = "right"
-  )
+    axis.text.x = element_text(angle = 0, hjust = 0.5, size = 12),
+    axis.title.x = element_blank(),
+    axis.text.y = element_text(size = 7),
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+    legend.position = "right",
+    legent.text = element_text(size = 12)
+  ) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "tomato")
 
-layout_proteomica_acute
+ggsave("~/R/Figures2/Layout Proteomics-Transcriptomics_Acute.png", layout_proteomica_acute, dpi = 320, height = 7, width = 9)
 
-ggsave("~/R/Figures2/Layout Proteomics-Transcriptomics_Acute.png", layout_proteomica_acute, dpi = 1080, height = 7, width = 9)
-
-# Both
-layout_proteomica_both <- ggplot(long_data_both, aes(x = Condition, y = log2FC, color = Type, group = Type)) +
-  geom_line() +
-  geom_point() + 
-  facet_wrap(~ Gene, scales = "free_y") +
+# -------------------------------
+# SUB-CHRONIC 
+# -------------------------------
+layout_proteomica_chronic <- ggplot(long_data_chronic %>% filter(Condition == "4-6 wpi"), aes(x = Gene, y = log2FC, fill = Type)) +
+  geom_col(position = "dodge") +
+  scale_fill_manual(values = color_pal) +
   labs(
-    title = "Proteomics vs Transcriptomics Comparison",
-    x = "Condition", 
-    y = "log2 Fold Change",
-    color = "Data Type"
+    title = "Transcriptomic and Proteomic Profiles - Chronic Dysregulation",
+    x = "Gene", y = "log2 Fold Change", fill = "Data Type"
   ) +
   theme_minimal(base_family = "sans") +
   theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    axis.text.y = element_text(size = 5),
-    legend.position = "right"
-  )
-
-layout_proteomica_both
-
-ggsave("~/R/Figures2/Layout Proteomics-Transcriptomics_Both.png", layout_proteomica_both, dpi = 1080, height = 7, width = 9)
-
-# Both
-layout_proteomica_both_x <- ggplot(long_data_both_x, aes(x = Condition, y = log2FC, color = Type, group = Type)) +
-  geom_line() +
-  geom_point() + 
-  facet_wrap(~ Gene, scales = "free_y") +
-  labs(
-    title = "Proteomics vs Transcriptomics Comparison",
-    x = "Condition", 
-    y = "log2 Fold Change",
-    color = "Data Type"
+    axis.text.x = element_text(angle = 0, hjust = 0.5, size = 16),
+    axis.title.x = element_blank(),
+    axis.text.y = element_text(size = 13),
+    legend.text = element_text(size = 14),        
+    legend.title = element_text(size = 16, face = "bold"), 
+    strip.text = element_text(size = 14),
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+    legend.position = "right",
+    legent.text = element_text(size = 12)
   ) +
-  theme_minimal(base_family = "sans") +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    axis.text.y = element_text(size = 5),
-    legend.position = "right"
-  )
-
-layout_proteomica_both_x
-
-ggsave("~/R/Figures2/Layout Proteomics-Transcriptomics_Both.png", layout_proteomica_both_x, dpi = 1080, height = 7, width = 9)
-
-# Chronic
-layout_proteomica_chronic <- ggplot(long_data_chronic, aes(x = Condition, y = log2FC, color = Type, group = Type)) +
-  geom_line() +
-  geom_point() + 
-  facet_wrap(~ Gene, scales = "free_y") +
-  labs(
-    title = "Proteomics vs Transcriptomics Comparison",
-    x = "Condition", 
-    y = "log2 Fold Change",
-    color = "Data Type"
-  ) +
-  theme_minimal(base_family = "sans") +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    axis.text.y = element_text(size = 5),
-    legend.position = "right"
-  )
-
-layout_proteomica_chronic
+  geom_hline(yintercept = 0, linetype = "dashed", color = "tomato")
 
 ggsave("~/R/Figures2/Layout Proteomics-Transcriptomics_Chronic.png", layout_proteomica_chronic, dpi = 1080, height = 7, width = 9)
 
-# No correlation
-layout_proteomica_no <- ggplot(long_data_no, aes(x = Condition, y = log2FC, color = Type, group = Type)) +
+# -------------------------------
+# BOTH 
+# -------------------------------
+layout_proteomica_both <- ggplot(long_data_both, aes(x = Condition, y = log2FC, color = Type, group = Type)) +
   geom_line() +
-  geom_point() + 
+  geom_point() +
   facet_wrap(~ Gene, scales = "free_y") +
+  scale_color_manual(values = color_pal) +
   labs(
-    title = "Proteomics vs Transcriptomics Comparison",
-    x = "Condition", 
-    y = "log2 Fold Change",
-    color = "Data Type"
+    title = "Transcriptomic and Proteomic Profiles - Acute & Sub-Chronic Dysregulation",
+    x = "Condition", y = "log2 Fold Change", color = "Data Type"
   ) +
   theme_minimal(base_family = "sans") +
-  theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    axis.text.y = element_text(size = 5),
+   theme(
+    axis.text.x = element_text(angle = 90, hjust = 0.5, size = 12),
+    axis.title.x = element_blank(),
+    axis.title.y =  element_text(size = 15),
+    axis.text.y = element_text(size = 15),
+    legend.text = element_text(size = 14),        
+    legend.title = element_text(size = 16, face = "bold"), 
+    strip.text = element_text(size = 16),
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
     legend.position = "right"
-  )
+  ) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "tomato")
 
-layout_proteomica_no
+ggsave("~/R/Figures2/Layout Proteomics-Transcriptomics_Both.png", layout_proteomica_both, dpi = 1080, height = 9, width = 12)
 
-ggsave("~/R/Figures2/Layout Proteomics-Transcriptomics_No.png", layout_proteomica_no, dpi = 1080, height = 7, width = 9)
-
-genes_corr <- unique(long_data_both$Gene)
-saveRDS(genes_corr, file = "~/R/Downloads/Genes_Correlation.rds")
+layout_proteomica_acute
+layout_proteomica_chronic
+layout_proteomica_both
 
 ```
+
+
+```{r}
+long_data_acute$Gene <- as.character(long_data_acute$Gene)
+
+genes_corr_both <- unique(long_data_both$Gene)
+saveRDS(genes_corr_both, file = "~/R/Downloads/Genes_Corr_Both.rds")
+
+genes_corr_acute <- unique(long_data_acute$Gene)
+saveRDS(genes_corr_acute, file = "~/R/Downloads/Genes_Corr_Acute.rds")
+
+genes_corr_subchronic <- unique(long_data_chronic$Gene)
+saveRDS(genes_corr_subchronic, file = "~/R/Downloads/Genes_Corr_Subchronic.rds")
+
+genes_corr <- c(genes_corr_both, genes_corr_acute, genes_corr_subchronic)
+saveRDS(genes_corr, file = "~/R/Downloads/Important_Genes.rds")
+```
+
 

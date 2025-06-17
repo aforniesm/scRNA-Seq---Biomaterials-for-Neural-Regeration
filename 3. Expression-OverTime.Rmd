@@ -20,6 +20,7 @@ library(venn)
 library(ComplexHeatmap)
 library(circlize)
 library(tidyverse)
+library(patchwork)
 
 # Data of DEGs
 times <- c("7 dpi", "4-6 wpi", "21 dpi", "1 dpi")
@@ -45,7 +46,7 @@ results <- purrr::reduce(datasets, function(x, y) merge(x, y, by = "Gene", all =
 results_venn <- results[, c("Gene", "7 dpi", "4-6 wpi", "p_val_adj_Acute", "p_val_adj_SubChronic")]
 
 # Filtering
-thresh_fc <- 0.5
+thresh_fc <- 0.585
 thresh_pval <- 0.05
 
 names_fc_venn <- c("7 dpi", "4-6 wpi")
@@ -59,33 +60,37 @@ downregulated <- map2(names_fc_venn, names_pval_venn, ~ {
   results_venn %>% filter(.data[[.x]] < -thresh_fc & .data[[.y]] < thresh_pval) %>% pull(Gene)
 })
 
-names(upregulated) <- names_fc_venn
-names(downregulated) <- names_fc_venn
+names(upregulated) <- c("7 dpi", "4-6 wpi")
+names(downregulated) <- c("7 dpi", "4-6 wpi")
 
-# Venn diagrams
-venn_up <- ggvenn(upregulated, fill_color = c("skyblue", "salmon"), stroke_size = 0.5, text_size = 5, set_name_size = 5.5)
-venn_down <- ggvenn(downregulated, fill_color = c("skyblue", "salmon"), stroke_size = 0.5, text_size = 5, set_name_size = 5.5)
+# Upregulated DEGs
+venn_up <- ggvenn(
+  upregulated,
+  fill_color = c("skyblue", "salmon"),
+  stroke_size = 0.1,
+  text_size = 5,
+  set_name_size = 3.5,
+) + ggtitle("Upregulated DEGs") + theme(plot.title = element_text(hjust = 0.5, face = "bold"))
 
-venn_up
-venn_down
 
-ggsave("~/R/Figures2/Venn-Upregulated.png", venn_up, dpi = 1080, width = 8, height = 7)
-ggsave("~/R/Figures2/Venn-Downregulated.png", venn_down, dpi = 1080, width = 8, height = 7)
+# Downregulated DEGs
+venn_down <- ggvenn(
+  downregulated,
+  fill_color = c("skyblue", "salmon"),
+  stroke_size = 0.1,
+  text_size = 5,
+  set_name_size = 3.5) + 
+  ggtitle("Downregulated DEGs") + theme(plot.title = element_text(hjust = 0.5, face = "bold"))
 
-# Intersections
-paste("Intersection upregulated:", Reduce(intersect, upregulated))
-paste("Intersection downregulated:", Reduce(intersect, downregulated))
+# Combine plots with patchwork
+venns <- venn_up + venn_down
+venns
 
-venn_up <- venn(upregulated, show.plot = FALSE)  
-intersections_up <- attr(venn_up, "intersections") 
-intersections_up 
-
-venn_down <- venn(downregulated, show.plot = FALSE)
-intersections_down <- attr(venn_down, "intersections")
-intersections_down
+ggsave("~/R/Figures2/Venns.png", venns, dpi = 1080, width = 8, height = 14)
 
 ```
 
+Time Plots
 
 ```{r}
 
@@ -104,23 +109,23 @@ results$`Uninjured` <- 0
 
 # Acute and then estabilize
 results1 <-  results %>% 
-  filter(`7 dpi` > 1 & `4-6 wpi` < 0.5| `7 dpi` < -1 & `4-6 wpi` > -0.5)
+  filter(`7 dpi` > 0.585 & `4-6 wpi`< 0.585  & `4-6 wpi` > -0.585| `7 dpi` < -0.585 & `4-6 wpi`< 0.585  & `4-6 wpi` > -0.585)
 
 # Acute and chronic
 results2 <-  results %>% 
-  filter(`7 dpi` > 1 & `4-6 wpi` > 0.5 |`7 dpi` < -1 & `4-6 wpi` < -0.5)
+  filter(`7 dpi` > 0.585 & `4-6 wpi` > 0.585 |`7 dpi` < -0.585 & `4-6 wpi` < -0.585)
 
 # Disregulated at late stages
 results3 <- results %>% 
-  filter(`4-6 wpi` > 0.75 & `7 dpi` < 0.5 | `4-6 wpi` < -0.75 & `7 dpi` > -0.5 | Gene %in% c("Cxcl12", "Plxnb1"))
+  filter(`4-6 wpi` > 0.585 & `7 dpi`< 0.585  & `7 dpi` > -0.585 & `1 dpi`< 0.585  & `1 dpi` > -0.585 | `4-6 wpi` < -0.585 & `7 dpi`< 0.585  & `7 dpi` > -0.585 & `1 dpi`< 0.585  & `1 dpi` > -0.585)
+
+results4 <- results %>% 
+  filter(`1 dpi` > 0.585 & `4-6 wpi` < -0.585 | `7 dpi` > 0.585 & `4-6 wpi` < -0.585 | `1 dpi` < -0.585 & `4-6 wpi` > 0.585| `7 dpi` < -0.585 & `4-6 wpi` > 0.585)
 
 interest_genes <- readRDS("~/R/Downloads/Genes_Filtered.rds")
 
 results1 <-  results1 %>% 
   filter(Gene %in% interest_genes)
-
-results1 <-  results1 %>% 
-  filter(!(Gene %in% c("S100a9","Fn1","Thbs1")))
 
 results2 <-  results2 %>% 
   filter(Gene %in% interest_genes)
@@ -128,11 +133,8 @@ results2 <-  results2 %>%
 results3 <-  results3 %>% 
   filter(Gene %in% interest_genes)
 
-results4 <- results3 %>%
-  filter(Gene %in% c("Lgi2", "Cbln1", "Cxcl12", "Plxnb1", "Thbs1"))
-
-results3 <-  results3 %>% 
-  filter(!(Gene %in% c("Cbln1", "Lgi2", "Plxnb1", "Cxcl12")))
+results4 <-  results4 %>% 
+  filter(Gene %in% interest_genes)
 
 results_long1 <- results1 %>%
   pivot_longer(cols = c(`Uninjured`,`1 dpi`, `7 dpi`,`21 dpi`, `4-6 wpi`), names_to = "TimePoint", values_to = "log2FC") %>% mutate(TimePoint = factor(TimePoint, levels = c("Uninjured", "1 dpi", "7 dpi", "21 dpi", "4-6 wpi")))
@@ -146,45 +148,144 @@ results_long3 <- results3 %>%
 results_long4 <- results4 %>%
   pivot_longer(cols = c(`Uninjured`,`1 dpi`, `7 dpi`,`21 dpi`, `4-6 wpi`), names_to = "TimePoint", values_to = "log2FC") %>% mutate(TimePoint = factor(TimePoint, levels = c("Uninjured", "1 dpi", "7 dpi", "21 dpi", "4-6 wpi")))
 
+# Acute
+results_long1 <- results_long1 %>%
+  mutate(nudge_y_label = ifelse(log2FC >= 0, 1, -1))
+
 timevariation1 <- ggplot(results_long1, aes(x = TimePoint, y = log2FC, group = Gene, color = Gene)) +
   geom_line() +
   geom_point() +
-  geom_text_repel(data = results_long1 %>% filter(TimePoint == "4-6 wpi"), aes(label = Gene), size = 3, nudge_x = 0.3, direction = "y", segment.color = "grey50") + theme_minimal() + labs(x = "Time Point", y = "log2 Fold Change", title = "Expression Changes Over Time - Acute") + theme(axis.text.x = element_text(angle = 90, hjust = 1)) + scale_color_viridis_d() + facet_grid(. ~ Matrisome.Category) +
+  geom_text_repel(
+    data = results_long1 %>% filter(TimePoint == "4-6 wpi"), 
+    aes(label = Gene), 
+    size = 5, 
+    nudge_x = 0.3,
+    nudge_y = results_long1$nudge_y_label, 
+    direction = "y", 
+    segment.color = "grey50", 
+    segment.size = 0.5, 
+    box.padding = 0.4,
+    point.padding = 0.3
+  ) + 
+  theme_minimal() + 
+  labs(x = "Time Point", 
+       y = "log2 Fold Change", 
+       title = "Expression Changes Over Time - Acute"
+  ) + 
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1, size = 12),
+    strip.text = element_text(size = 14),
+    plot.title = element_text(size = 18, face = "bold", hjust = 0.5)
+  ) + 
+  scale_color_viridis_d() + 
+  facet_grid(. ~ Matrisome.Category) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "tomato")
 
-timevariation1
-
-ggsave("~/R/Figures2/Layout_Acute.png",timevariation1, dpi = 1080, width = 14, height = 7)
+# Acute & Sub-chronic
+results_long2 <- results_long2 %>%
+  mutate(nudge_y_label = ifelse(log2FC >= 0, 1, -0.5))
 
 timevariation2 <- ggplot(results_long2, aes(x = TimePoint, y = log2FC, group = Gene, color = Gene)) +
   geom_line() +
   geom_point() +
-  geom_text_repel(data = results_long2 %>% filter(TimePoint == "4-6 wpi"), aes(label = Gene), size = 3, nudge_x = 0.3, direction = "y", segment.color = "grey50") + theme_minimal() + labs(x = "Time Point", y = "log2 Fold Change", title = "Expression Changes Over Time - Acute & Chronic") + theme(axis.text.x = element_text(angle = 90, hjust = 1)) + scale_color_viridis_d() + facet_grid(. ~ Matrisome.Category) +
+  geom_text_repel(
+    data = results_long2 %>% filter(TimePoint == "4-6 wpi"), 
+    aes(label = Gene), 
+    size = 5.5, 
+    nudge_x = 0.3,
+    nudge_y = results_long2$nudge_y_label, 
+    direction = "y", 
+    segment.color = "grey50", 
+    segment.size = 0.5, 
+    box.padding = 0.4,
+    point.padding = 0.3
+  ) + 
+  theme_minimal() + 
+  labs(x = "Time Point", 
+       y = "log2 Fold Change", 
+       title = "Expression Changes Over Time - Acute & Sub-chronic"
+  ) + 
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1, size = 14),
+    strip.text = element_text(size = 16),
+    plot.title = element_text(size = 20, face = "bold", hjust = 0.5)
+  ) + 
+  scale_color_viridis_d() + 
+  facet_grid(. ~ Matrisome.Category) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "tomato")
 
-timevariation2
-
-ggsave("~/R/Figures2/Layout_Acute&Chronic.png", timevariation2, dpi = 1080, width = 14, height = 7)
+# Sub-chronic
+results_long3 <- results_long3 %>%
+  mutate(nudge_y_label = ifelse(log2FC >= 0, 0.3, -0.3))
 
 timevariation3 <- ggplot(results_long3, aes(x = TimePoint, y = log2FC, group = Gene, color = Gene)) +
   geom_line() +
   geom_point() +
-  geom_text_repel(data = results_long3 %>% filter(TimePoint == "4-6 wpi"), aes(label = Gene), size = 3, nudge_x = 0.3, direction = "y", segment.color = "grey50") + theme_minimal() + labs(x = "Time Point", y = "log2 Fold Change", title = "Expression Changes Over Time - Heterogenous") + theme(axis.text.x = element_text(angle = 90, hjust = 1)) + scale_color_viridis_d() + facet_grid(. ~ Matrisome.Category) +
+  geom_text_repel(
+    data = results_long3 %>% filter(TimePoint == "4-6 wpi"), 
+    aes(label = Gene), 
+    size = 5, 
+    nudge_x = 0.3,
+    nudge_y = results_long3$nudge_y_label, 
+    direction = "y", 
+    segment.color = "grey50", 
+    segment.size = 0.5, 
+    box.padding = 0.4,
+    point.padding = 0.3
+  ) + 
+  theme_minimal() + 
+  labs(x = "Time Point", 
+       y = "log2 Fold Change", 
+       title = "Expression Changes Over Time - Sub-chronic"
+  ) + 
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1, size = 12),
+    strip.text = element_text(size = 14),
+    plot.title = element_text(size = 18, face = "bold", hjust = 0.5)
+  ) + 
+  scale_color_viridis_d() + 
+  facet_grid(. ~ Matrisome.Category) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "tomato")
 
-timevariation3
-
-ggsave("~/R/Figures2/Layout_Heterogenous.png", timevariation3, dpi = 1080, width = 14, height = 7)
+# Heterogeneous
+results_long4 <- results_long4 %>%
+  mutate(nudge_y_label = ifelse(log2FC >= 0, 1, -1))
 
 timevariation4 <- ggplot(results_long4, aes(x = TimePoint, y = log2FC, group = Gene, color = Gene)) +
   geom_line() +
   geom_point() +
-  geom_text_repel(data = results_long4 %>% filter(TimePoint == "4-6 wpi"), aes(label = Gene), size = 3, nudge_x = 0.3, direction = "y", segment.color = "grey50") + theme_minimal() + labs(x = "Time Point", y = "log2 Fold Change", title = "Expression Changes Over Time - Chronic") + theme(axis.text.x = element_text(angle = 90, hjust = 1)) + scale_color_viridis_d() + facet_grid(. ~ Matrisome.Category) +
+  geom_text_repel(
+    data = results_long4 %>% filter(TimePoint == "4-6 wpi"), 
+    aes(label = Gene), 
+    size = 5, 
+    nudge_x = 0.5,
+    nudge_y = results_long4$nudge_y_label, 
+    direction = "y", 
+    segment.color = "grey50", 
+    segment.size = 0.5, 
+    box.padding = 0.4,
+    point.padding = 0.3
+  ) + 
+  theme_minimal() + 
+  labs(x = "Time Point", 
+       y = "log2 Fold Change", 
+       title = "Expression Changes Over Time - Heterogeneous"
+  ) + 
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1, size = 12),
+    strip.text = element_text(size = 14),
+    plot.title = element_text(size = 18, face = "bold", hjust = 0.5)
+  ) + 
+  scale_color_viridis_d() + 
+  facet_grid(. ~ Matrisome.Category) +
   geom_hline(yintercept = 0, linetype = "dashed", color = "tomato")
 
-timevariation4
+ggsave("~/R/Figures2/Layout_Acute.png", timevariation1, dpi = 1080, width = 14, height = 7)
+ggsave("~/R/Figures2/Layout_Acute_Subchronic.png", timevariation2, dpi = 1080, width = 14, height = 7)
+ggsave("~/R/Figures2/Layout_Subchronic.png", timevariation3, dpi = 1080, width = 14, height = 7)
+ggsave("~/R/Figures2/Layout_Heterogeneous.png", timevariation4, dpi = 1080, width = 14, height = 7)
 
-ggsave("~/R/Figures2/Layout_Chronic.png", timevariation4, dpi = 1080, width = 14, height = 7)
+
 ```
 
 

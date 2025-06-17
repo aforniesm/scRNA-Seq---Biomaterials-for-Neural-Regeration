@@ -27,7 +27,6 @@ library(tibble)
 
 1. First of all, we need to prepare the three datasets for integration. One of the most important points is standarize the labels of the dataset.The different datasets are already filtered by QC metrics. (% mitochondrial < 0.2, no doublets)
 
-
 Dataset Milich 
 
 ```{r}
@@ -175,47 +174,6 @@ paste("Cells:", ncol(seurat) + ncol(seurat2) + ncol(seurat3))
 
 ```
 
-Dataset - Kathe 2022
-
-```{r}
-
-matrix5 <- readMM("~/R/Data/Dataset5.mtx")
-barcodes5 <- read.table("~/R/Data/barcodes5.txt.gz", header = F)
-features5 <- read.delim("~/R/Data/features5.txt.gz", header = F)
-metadata5 <- read.delim("~/R/Data/metadata5.txt")
-
-
-colnames(matrix5) <- barcodes5$V1
-rownames(matrix5) <- features5$V1
-
-rownames(metadata5) <- metadata5$barcode
-
-metadata5 <- metadata5 %>% rename(time = label)
-metadata5 <- metadata5 %>% rename(celltype = global_cell_type)
-
-metadata5$time <- recode(metadata5$time, "SCI" = "Sub-Chronic")
-
-metadata5 <- metadata5 %>% select(matches("time|celltype"))
-
-metadata5$technology <- "snRNA"
-metadata5$dataset <- "Kathe_2022"
-
-```
-
-
-```{r}
-seurat5 <- CreateSeuratObject(matrix5, assay = "RNA", project = "Kathe_2022",  meta.data = metadata5, min.cells = 50, min.features = 100)
-
-remove_features5 <- nrow(matrix5) - nrow(seurat5)
-remove_cells5 <- ncol(matrix5) - ncol(seurat5)
-
-seurat5 <- subset(seurat5, subset = time %in% c("Uninjured", "Sub-Chronic"))
-
-remove_cells5_f <- ncol(matrix5) - ncol(seurat5)
-
-rm(matrix5, barcodes5, metadata5, features5)
-
-```
 
 ```{r}
 save.image(file = "~/R/Data/Seurats_Acute.RData")
